@@ -1,0 +1,65 @@
+# Зависимости и сборка
+node_modules/
+dist/
+dist-ssr/
+coverage/
+release/
+release-check/
+*.zip
+
+# Автономный Python для установщика — собирается скриптом
+.pyruntime/
+.pyenv/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Секреты и окружение — никогда не коммитим (только .env.example)
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+/settings.json
+/instance.json
+
+# Данные бэкенда: база с пользователями, сессии, резервные копии
+backend/data/
+/data/
+/backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+state.json
+
+# Журналы
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Рабочие заметки и служебные папки ассистентов
+BACKLOG.md
+.agents/
+.claude/
+.codex/
+
+# Редакторы и система
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
+.DS_Store
+Thumbs.db
+desktop.ini

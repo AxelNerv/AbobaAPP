@@ -1,0 +1,112 @@
+{
+  "name": "abobatv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test:unit": "vitest",
+    "lint": "eslint --ext .js,.vue src electron scripts",
+    "lint:fix": "eslint --ext .js,.vue src electron scripts --fix",
+    "format": "prettier --write src/",
+    "app": "cross-env ABOBA_DEV=1 electron .",
+    "app:prod": "electron .",
+    "app:python": "node scripts/prepare-python.js",
+    "app:frontend": "vite build --mode desktop",
+    "app:build": "yarn app:python && yarn app:frontend && electron-builder --win",
+    "app:unpacked": "yarn app:python && yarn app:frontend && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "@ghostery/adblocker-electron": "2.18.2",
+    "@unhead/vue": "^2.1.12",
+    "axios": "^1.13.6",
+    "dompurify": "^3.3.3",
+    "lucide-vue-next": "^1.0.0",
+    "pinia": "^3.0.4",
+    "pinia-plugin-persistedstate": "^4.7.1",
+    "qrcode.vue": "^3.8.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "vue": "3.5.30",
+    "vue-lazyload": "^3.0.0",
+    "vue-router": "^5.0.3",
+    "vue3-cookies": "^1.0.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@pinia/testing": "^1.0.3",
+    "@vitejs/plugin-vue": "6.0.5",
+    "@vue/test-utils": "2.4.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.8.0",
+    "jsdom": "^29.0.0",
+    "png-to-ico": "^3.0.2",
+    "prettier": "^3.8.1",
+    "sass-embedded": "^1.98.0",
+    "sharp": "^0.34.5",
+    "vite": "8.0.0",
+    "vite-plugin-eslint": "^1.8.1",
+    "vite-ssg": "^28.3.0",
+    "vitest": "^4.1.0",
+    "vue-eslint-parser": "^10.4.0"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "tv.aboba.desktop",
+    "productName": "AbobaTV",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "!electron/**/*.spec.js",
+      "!electron/bot.cjs",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!data/**",
+          "!tests/**",
+          "!bot.py",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": ".pyruntime",
+        "to": "python",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "AbobaTV",
+      "createDesktopShortcut": true
+    }
+  }
+}

@@ -1,0 +1,5 @@
+
+# Скрипты и конфиги для Linux-сервера: с CRLF bash и Caddy падают
+deploy/auth-vps/install.sh text eol=lf
+deploy/auth-vps/Caddyfile text eol=lf
+deploy/auth-vps/docker-compose.yml text eol=lf

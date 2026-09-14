@@ -1,0 +1,123 @@
+.custom-select {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  padding: 8px 30px 8px 16px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+
+  &:hover { border-color: var(--border-hover); }
+  // Мышью — только подсветка рамки, без кольца (оно бы мешало).
+  // С клавиатуры кольцо обязано быть видно, иначе по сайту невозможно
+  // перемещаться табом — раньше здесь стоял outline: none !important,
+  // то есть фокус убрали и ничем не заменили.
+  &:focus { border-color: var(--accent-color); }
+  &:focus:not(:focus-visible) { outline: none; }
+
+  &__wrapper {
+    position: relative;
+    width: 100%;
+    &::after {
+      content: '';
+      position: absolute;
+      right: 12px; top: 50%;
+      transform: translateY(-50%);
+      width: 0; height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid currentColor;
+      pointer-events: none;
+    }
+  }
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: var(--accent-transparent);
+  }
+
+  &.active {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: var(--accent-transparent);
+    box-shadow: var(--neon-glow);
+  }
+
+  &--primary {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: var(--accent-transparent);
+    box-shadow: var(--neon-glow);
+
+    &:hover {
+      background: rgba(0,229,255,0.15);
+      color: var(--accent-light);
+      box-shadow: var(--neon-glow-hover);
+    }
+  }
+
+  &--secondary {
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+
+    &:hover { border-color: var(--secondary-hover); }
+  }
+
+  &--success {
+    border-color: var(--success-color);
+    color: var(--success-color);
+
+    &:hover { border-color: var(--success-hover); }
+  }
+
+  &--error {
+    border-color: var(--error-color);
+    color: var(--error-color);
+
+    &:hover { background: var(--error-hover); border-color: var(--error-hover); color: #fff; }
+  }
+
+  &--search {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  &--close {
+    position: absolute;
+    top: 8px; right: 6px;
+    background: none; border: none;
+    color: var(--text-muted);
+    cursor: pointer; padding: 2px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+
+    &:hover { opacity: 1; }
+    i { font-size: 16px; display: block; width: 20px; height: 20px; }
+  }
+}

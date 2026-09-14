@@ -1,0 +1,46 @@
+import { defineStore } from 'pinia'
+import { PLAYER_STORE_NAME } from './constants'
+import { beforeHydrateLegacyVuex } from './utils'
+
+export const usePlayerStore = defineStore(PLAYER_STORE_NAME, {
+  state: () => ({
+    preferredPlayer: null,
+    aspectRatio: '16:9',
+    isCentered: false,
+    showFavoriteTooltip: true,
+    kinobdSourceByKpId: {}
+  }),
+
+  actions: {
+    updatePreferredPlayer(player) {
+      this.preferredPlayer = player
+    },
+    clearPreferredPlayer() {
+      this.preferredPlayer = null
+    },
+    updateAspectRatio(ratio) {
+      this.aspectRatio = ratio
+    },
+    updateCentering(value) {
+      this.isCentered = value
+    },
+    setFavoriteTooltip(value) {
+      this.showFavoriteTooltip = value
+    },
+    setKinoBdSource(kpId, inid) {
+      if (!kpId) return
+      this.kinobdSourceByKpId = {
+        ...this.kinobdSourceByKpId,
+        [String(kpId)]: inid
+      }
+    },
+    clearKinoBdSources() {
+      this.kinobdSourceByKpId = {}
+    }
+  },
+
+  persist: {
+    key: PLAYER_STORE_NAME,
+    beforeHydrate: beforeHydrateLegacyVuex
+  }
+})

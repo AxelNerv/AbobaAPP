@@ -1,0 +1,192 @@
+@use './controls.scss';
+// FontAwesome больше не подключается: все иконки переведены на Lucide
+// (см. components/icons/AppIcon.vue), поэтому шрифт с ~2000 глифов и его
+// три woff2-файла из сборки убраны.
+// Шрифт Inter переехал в index.html как неблокирующий <link>. CSS-@import
+// создавал цепочку запросов: браузер сначала качал main.css и только потом
+// узнавал про шрифт, что задерживало первую отрисовку.
+
+:root {
+  /* Midnight + Cyan */
+  --accent-color: #00e5ff;
+  --accent-hover: #00b0ff;
+  --accent-light: #6ff9ff;
+  --accent-dark: #0091ea;
+  --accent-transparent: rgba(0, 229, 255, 0.09);
+  --accent-semi-transparent: rgba(0, 229, 255, 0.25);
+  --accent2: #00b0ff;
+
+  --neon-glow: 0 0 8px rgba(0,229,255,0.35), 0 0 20px rgba(0,229,255,0.15);
+  --neon-glow-hover: 0 0 12px rgba(0,229,255,0.5), 0 0 30px rgba(0,229,255,0.25);
+  --neon-border: 1px solid rgba(0,229,255,0.3);
+
+  --secondary-color: #00e5ff;
+  --secondary-hover: #00b8d4;
+  --success-color: #00e5ff;
+  --success-hover: #00b8d4;
+  --error-color: #ff5252;
+  --error-hover: #ff1744;
+  --warning-color: #ffca28;
+  --warning-hover: #ff8f00;
+
+  /* Midnight */
+  --bg-primary: #06080f;
+  --bg-secondary: #0a0c18;
+  --bg-tertiary: #0f1220;
+  --bg-modal: rgba(10, 12, 24, 0.97);
+  --bg-card: rgba(255,255,255,0.04);
+  --bg-side: #06080f;
+
+  --text-color: #e8eaf0;
+  --text-muted: rgba(232,234,240,0.35);
+  --text-secondary: rgba(232,234,240,0.6);
+
+  --border-color: rgba(255,255,255,0.07);
+  --border-hover: rgba(0,229,255,0.25);
+  --border-focus: var(--accent-color);
+  --border-accent: rgba(0,229,255,0.15);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text-color);
+  background-color: var(--bg-primary);
+  margin: 0 auto;
+  padding: 0 0 0 60px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Midnight gradient background — purple top, blue bottom-right */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 70% at 50% 0%, rgba(100, 20, 180, 0.25) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 60% at 85% 100%, rgba(0, 80, 200, 0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 50% at 10% 50%, rgba(0, 150, 200, 0.10) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+html.no-scroll, body.no-scroll { overflow: hidden; height: 100%; }
+
+button, select, input { font-family: 'Inter', system-ui, sans-serif; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+@media (max-width: 600px) { body { padding: 2px 2px 15px 2px; } }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+img.loading {
+  background: linear-gradient(90deg, rgba(10,12,24,0.9) 0%, rgba(20,24,40,0.9) 50%, rgba(10,12,24,0.9) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+  min-height: 100%; min-width: 100%; height: 100%; width: 100%;
+}
+img.error { background: rgba(10,12,24,0.9); min-height: 100%; min-width: 100%; height: 100%; width: 100%; }
+img.loaded { opacity: 1; transition: opacity 0.3s ease-in-out; }
+
+/* ── Видимый фокус с клавиатуры ─────────────────────────────────────────
+   Аудит показал: 40 из 40 интерактивных элементов не имели никакого
+   видимого фокуса — по сайту было невозможно перемещаться табом.
+   Причина: outline: none в нескольких местах без замены.
+
+   :focus-visible (а не :focus) — кольцо появляется только при навигации
+   с клавиатуры и не мешает тем, кто кликает мышью. */
+:focus-visible {
+  outline: 2px solid var(--accent-color, #00e5ff);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Элементы со своим скруглением — кольцо должно повторять форму */
+button:focus-visible,
+a:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent-color, #00e5ff);
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/* Уважаем системную настройку «меньше движения»: анимации выключаем,
+   но фокус и прочую доступность не трогаем. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Вращение спиннера. Раньше его давал класс fa-spin из FontAwesome —
+   на SVG-иконках он не работает, поэтому крутим сами. */
+.app-icon.spin {
+  animation: app-icon-spin 1s linear infinite;
+}
+
+@keyframes app-icon-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Десктопное приложение ───────────────────────────────────────────────
+   Рамка окна своя (titleBarStyle: hidden), поэтому нужна полоса, за
+   которую окно можно таскать — иначе его не сдвинуть с места.
+   Класс на <html> ставит приложение при старте. */
+.is-desktop-app .app-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 34px;
+  z-index: 9999;
+  -webkit-app-region: drag;
+  pointer-events: auto;
+  /* Непрозрачная: полоса перекрывает кнопки окна лишь визуально, а при
+     прокрутке прячет уезжающее под неё содержимое. Прозрачная выглядела
+     так, будто интерфейс обрезан сверху. */
+  background: #0a0e1a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Интерактивное внутри полосы должно оставаться кликабельным */
+.is-desktop-app .app-drag-strip button,
+.is-desktop-app .app-drag-strip a {
+  -webkit-app-region: no-drag;
+}
+
+/* Контент опускаем, чтобы не заезжал под рамку */
+.is-desktop-app body {
+  padding-top: 34px;
+}
+
+/* Элементы, прибитые к самому верху, опускаем ниже полосы окна — иначе
+   она их накрывает и они выглядят обрезанными (логотип, колокольчик).
+   Селектор начинается с html не для красоты: у компонентов стили scoped,
+   и их правила весят больше обычного класса — без html они побеждают. */
+html.is-desktop-app .floating-bell-wrapper {
+  top: 46px;
+}
+
+html.is-desktop-app .sidebar {
+  top: 34px;
+}
+
+/* Мобильная шапка тоже прибита к верху */
+html.is-desktop-app .mobile-header {
+  top: 34px;
+}
