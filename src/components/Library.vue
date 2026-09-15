@@ -66,7 +66,14 @@
       </div>
     </div>
 
+    <div v-if="syncError" class="lib-sync-error">{{ syncError }}</div>
+
     <div v-if="loading" class="lib-state">Загружаем…</div>
+
+    <div v-else-if="loadError" class="lib-state lib-state-error">
+      Не удалось загрузить библиотеку: {{ loadError }}
+      <button class="lib-retry" @click="load">Повторить</button>
+    </div>
 
     <div v-else-if="!visibleItems.length" class="lib-state">
       {{ query ? 'Ничего не нашлось по запросу' : 'Здесь пока пусто' }}
@@ -125,7 +132,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
-import { getMyLists, delFromList, delAllFromList } from '@/api/user'
+import { getMyLists, delFromList, delAllFromList, getSyncStatus } from '@/api/user'
 import { useAuthStore } from '@/store/auth'
 import { useMainStore } from '@/store/main'
 import { USER_LIST_TYPES_ENUM } from '@/constants'
@@ -138,6 +145,8 @@ const mainStore = useMainStore()
 const history = ref([])
 const favorites = ref([])
 const loading = ref(true)
+const loadError = ref('')
+const syncError = ref('')
 const clearing = ref(false)
 const confirmOpen = ref(false)
 const avatarBroken = ref(false)
@@ -246,17 +255,26 @@ const load = async () => {
     return
   }
   loading.value = true
+  loadError.value = ''
   try {
+    // Ошибку не глотаем: пустой список и «бэкенд не ответил» — разные вещи.
     const [h, f] = await Promise.all([
-      getMyLists(USER_LIST_TYPES_ENUM.HISTORY).catch(() => []),
-      getMyLists(USER_LIST_TYPES_ENUM.FAVORITE).catch(() => [])
+      getMyLists(USER_LIST_TYPES_ENUM.HISTORY),
+      getMyLists(USER_LIST_TYPES_ENUM.FAVORITE)
     ])
     history.value = Array.isArray(h) ? h : []
     favorites.value = Array.isArray(f) ? f : []
     mainStore.setHistory(history.value)
+  } catch (err) {
+    loadError.value = err?.status === 401 ? 'вход устарел, войдите заново' : err?.message || 'ошибка сети'
   } finally {
     loading.value = false
   }
+  getSyncStatus()
+    .then((state) => {
+      syncError.value = state?.enabled && state.error ? `Синхронизация не работает: ${state.error}` : ''
+    })
+    .catch(() => {})
 }
 
 const removeItem = async (item) => {
@@ -694,6 +712,31 @@ onMounted(load)
   text-align: center;
   font-size: 14.5px;
   color: rgba(255, 255, 255, 0.35);
+}
+
+.lib-state-error {
+  color: #ff8aa8;
+}
+
+.lib-retry {
+  display: block;
+  margin: 14px auto 0;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  cursor: pointer;
+}
+
+.lib-sync-error {
+  margin: -12px 0 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 82, 82, 0.28);
+  background: rgba(255, 82, 82, 0.08);
+  color: #ff8aa8;
+  font-size: 13px;
 }
 
 @media (max-width: 640px) {

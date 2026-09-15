@@ -68,7 +68,7 @@
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
 import QrcodeVue from 'qrcode.vue'
-import { generateToken, getTGAuthResult } from '@/api/user'
+import { generateToken, getTGAuthResult, syncNow } from '@/api/user'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
 
@@ -129,6 +129,13 @@ export default {
                 photo: response.user.photo_url || ''
               })
             }
+            // Библиотека живёт на сервере входа: даём ей подтянуться до перехода,
+            // иначе первая страница покажет пустую историю. Не дольше 10 секунд —
+            // без сети приложение всё равно работает, синхронизация дойдёт позже.
+            await Promise.race([
+              syncNow().catch(() => null),
+              new Promise((resolve) => setTimeout(resolve, 10000))
+            ])
             // Редирект на главную без AuthSuccess (он дёргает чужое API)
             router.push('/').then(() => router.go(0))
             return

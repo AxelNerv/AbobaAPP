@@ -45,6 +45,10 @@
       </div>
     </div>
 
+    <div v-if="progressLabel" class="progress-resume">
+      Остановился: <strong>{{ progressLabel }}</strong>
+    </div>
+
     <!-- Единый контейнер плеера -->
     <div
       ref="containerRef"
@@ -283,6 +287,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PlayerModal from '@/components/PlayerModal.vue'
 import { hasAllohaUhd } from '@/api/playerQuality'
+import { getWatchProgress, saveWatchProgress } from '@/api/user'
+import { formatProgress, playerFamily, summarizeProgress } from '@/utils/watchProgress'
 
 const mainStore = useMainStore()
 const playerStore = usePlayerStore()
@@ -933,8 +939,104 @@ const onIframeError = () => {
   if (iframeLoading.value) goToNextWorkingPlayer()
 }
 
+// ── Серия и таймкод ──
+// Позицию помнит сам плеер у себя в iframe. Приложение раз в 15 секунд
+// забирает её оттуда (через главный процесс) и кладёт в базу, откуда она
+// синхронизируется на другие компьютеры. При открытии — кладёт обратно.
+const PROGRESS_SAVE_MS = 15000
+const progressSupported = isDesktopApp && !!window.electronAPI?.player
+const savedProgress = ref(null)
+const progressLabel = computed(() => formatProgress(savedProgress.value?.summary))
+let progressTimer = null
+let lastProgressSnapshot = ''
+let progressKpId = ''
+
+const hasAuthToken = () => {
+  try {
+    return !!JSON.parse(window.localStorage.getItem('auth') || '{}')?.token
+  } catch {
+    return false
+  }
+}
+
+const loadSavedProgress = async () => {
+  progressKpId = String(props.kpId || kp_id.value || '')
+  savedProgress.value = null
+  lastProgressSnapshot = ''
+  if (!progressSupported || !progressKpId || !hasAuthToken()) return
+  try {
+    const { payload } = await getWatchProgress(progressKpId)
+    if (payload && typeof payload === 'object' && payload.players) savedProgress.value = payload
+  } catch {
+    // Нет сохранённой позиции или бэкенд занят — смотреть это не мешает.
+  }
+  // Плеер читает позицию в первые же мгновения загрузки, поэтому готовим её
+  // для всех плееров сразу, ещё до того, как выбран какой-то из них.
+  const players = savedProgress.value?.players || {}
+  await Promise.all(
+    Object.entries(players).map(([family, saved]) =>
+      saved?.entries ? sendRestore(saved.entries, `https://player.${family}/`) : null
+    )
+  )
+}
+
+// Через мост Electron проходят только обычные объекты: реактивный Proxy
+// из Vue он скопировать не может и падает прямо в момент вызова.
+const plain = (value) => JSON.parse(JSON.stringify(value))
+
+const sendRestore = async (entries, src) => {
+  try {
+    return await window.electronAPI.player.restoreProgress(plain(entries), src)
+  } catch {
+    return false
+  }
+}
+
+const restoreProgressFor = (player) => {
+  const family = playerFamily(player?.iframe)
+  const saved = savedProgress.value?.players?.[family]
+  if (!progressSupported || !saved?.entries) return
+  sendRestore(saved.entries, player.iframe)
+}
+
+const saveProgress = async () => {
+  const src = selectedPlayerInternal.value?.iframe
+  const kpId = progressKpId
+  if (!progressSupported || !src || !kpId || !hasAuthToken()) return
+  let snapshot = null
+  try {
+    snapshot = await window.electronAPI.player.readProgress(src)
+  } catch {
+    return
+  }
+  const entries = snapshot?.entries
+  if (!entries || !Object.keys(entries).length) return
+  const serialized = JSON.stringify(entries)
+  if (serialized === lastProgressSnapshot) return
+  const summary = summarizeProgress(entries)
+  const family = playerFamily(src)
+  const current = savedProgress.value || { v: 1, players: {} }
+  const next = {
+    v: 1,
+    players: {
+      ...current.players,
+      [family]: { entries, summary, player: selectedPlayerInternal.value?.key || '', saved_at: Date.now() }
+    },
+    summary: summary || current.summary || null,
+    updated_player: family
+  }
+  try {
+    await saveWatchProgress(kpId, next)
+    lastProgressSnapshot = serialized
+    savedProgress.value = next
+  } catch {
+    // Повторим на следующем тике.
+  }
+}
+
 watch(selectedPlayerInternal, (newVal) => {
   if (newVal) {
+    restoreProgressFor(newVal)
     iframeLoading.value = true
     playerStore.updatePreferredPlayer(normalizeKey(newVal.key))
     emit('update:selectedPlayer', newVal)
@@ -946,7 +1048,10 @@ watch(
   () => route.params.kp_id,
   async (newKpId) => {
     if (newKpId && newKpId !== kp_id.value) {
+      // Позицию прошлого фильма дописываем до того, как переключиться.
+      await saveProgress()
       kp_id.value = newKpId
+      loadSavedProgress()
       if (isCentered.value) centerPlayer()
     }
   },
@@ -983,18 +1088,27 @@ const toggleFavorite = () => {
 
 const showFavoriteTooltip = computed(() => playerStore.showFavoriteTooltip)
 
-onMounted(() => {
+onMounted(async () => {
+  if (progressSupported) progressTimer = setInterval(saveProgress, PROGRESS_SAVE_MS)
 
   iframeLoading.value = true
-  fetchPlayers()
   if (isMobile.value) aspectRatio.value = '4:3'
   updateScaleFactor()
   window.addEventListener('resize', updateScaleFactor)
   window.addEventListener('resize', updateTooltipPosition)
   if (isCentered.value) centerPlayer()
+  // Позиция — локальный запрос на доли секунды; ждём её не дольше полутора
+  // секунд, чтобы медленный бэкенд не задерживал сам плеер.
+  await Promise.race([
+    loadSavedProgress().catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 1500))
+  ])
+  fetchPlayers()
 })
 
 onBeforeUnmount(() => {
+  clearInterval(progressTimer)
+  saveProgress()
 
   window.removeEventListener('resize', updateScaleFactor)
   window.removeEventListener('resize', updateTooltipPosition)
@@ -1005,6 +1119,23 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.progress-resume {
+  max-width: 800px;
+  margin: 0 auto 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  text-align: center;
+}
+
+.progress-resume strong {
+  color: #fff;
+  font-weight: 600;
+}
+
 .players-list {
   width: 100%;
   max-width: 800px;

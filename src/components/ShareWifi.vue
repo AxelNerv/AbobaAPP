@@ -14,14 +14,14 @@
     <template v-else>
       <div class="share-card">
         <div class="share-row-title">Вход через Telegram</div>
-        <p class="share-hint">Бот работает на сервере в Docker. Здесь нужен только адрес сервера входа.</p>
+        <p class="share-hint">Сервер входа хранит и синхронизирует историю. Поле можно оставить пустым — будет сервер по умолчанию.</p>
         <label class="share-label" for="auth-server">Адрес сервера</label>
-        <input id="auth-server" v-model="authServerUrl" class="settings-input" placeholder="https://auth.example.com" :disabled="busy" />
+        <input id="auth-server" v-model="authServerUrl" class="settings-input" :placeholder="status.defaultAuthServerUrl || 'https://auth.example.com'" :disabled="busy" />
         <label class="tray-option"><input v-model="closeToTray" type="checkbox" :disabled="busy" /> Сворачивать в трей при закрытии окна</label>
         <label class="tray-option"><input v-model="adblock" type="checkbox" :disabled="busy" /> Блокировать рекламу в плеерах</label>
         <p v-if="status.adblock" class="share-hint">{{ adblockHint }}</p>
         <button class="share-toggle" :disabled="busy || !settingsReady" @click="saveSettings">Сохранить настройки</button>
-        <p class="share-hint">{{ status.authConfigured ? 'Сервер входа настроен' : 'Сервер входа пока не настроен' }}</p>
+        <p v-if="status.authServerUrl" class="share-hint">Используется: {{ status.authServerUrl }}</p>
       </div>
       <div class="share-card">
         <div class="share-row-title">Данные и диагностика</div>
@@ -31,8 +31,10 @@
           <button class="share-copy" :disabled="busy" @click="openLogs">Открыть журнал</button>
           <button class="share-copy" :disabled="busy" @click="backup">Сохранить копию</button>
           <button class="share-copy" :disabled="busy" @click="restore">Восстановить копию</button>
+          <button class="share-copy" :disabled="busy" @click="importFile">Импорт библиотеки</button>
         </div>
         <p class="share-hint">Копия содержит историю, избранное и настройки этого приложения. Перед восстановлением сохраняется текущая база.</p>
+        <p class="share-hint">Импорт добавляет историю, избранное и позиции просмотра из файла (например, из браузера) и ничего не затирает. Нужен вход.</p>
       </div>
       <p v-if="error" class="share-error" role="alert">{{ error }}</p>
       <p v-if="message" class="share-hint" role="status">{{ message }}</p>
@@ -111,6 +113,7 @@
 import { ref, onMounted, computed } from 'vue'
 import QrcodeVue from 'qrcode.vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import { importLibrary } from '@/api/user'
 
 const isApp = computed(() => typeof window !== 'undefined' && !!window.electronAPI)
 
@@ -200,6 +203,15 @@ const perform = async (action, success = '') => {
 const saveSettings = () => perform(() => window.electronAPI.saveSettings({ authServerUrl: authServerUrl.value, closeToTray: closeToTray.value, adblock: adblock.value }), 'Настройки сохранены')
 const backup = () => perform(() => window.electronAPI.createBackup(), (result) => `Резервная копия сохранена: ${result.file}`)
 const restore = () => perform(() => window.electronAPI.restoreBackup(), 'Копия восстановлена')
+const importFile = () => perform(async () => {
+  const picked = await window.electronAPI.pickImportFile()
+  if (!picked?.ok) return picked
+  try {
+    return { ok: true, ...(await importLibrary(picked.data)) }
+  } catch (err) {
+    return { ok: false, error: err.status === 401 ? 'Сначала войдите через Telegram' : err.message }
+  }
+}, (result) => `Импорт готов: история +${result.history}, избранное +${result.favorites}, позиций просмотра ${result.progress}`)
 const openLogs = () => perform(async () => { const error = await window.electronAPI.openLogs(); if (error) throw new Error(error) })
 onMounted(async () => {
   try {

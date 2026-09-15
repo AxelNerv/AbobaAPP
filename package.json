@@ -106,7 +106,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "AbobaTV",
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "artifactName": "AbobaTV-Setup-${version}.${ext}"
     }
   }
 }

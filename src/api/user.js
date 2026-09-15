@@ -138,6 +138,19 @@ const getTGAuthResult = async (token) => {
     return { authenticated: false }
 }
 
+// Синхронизация библиотеки с сервером входа: локальный бэкенд делает обмен сам,
+// интерфейс только просит «сейчас» и показывает состояние.
+const syncNow = async () => await listFetch('/sync/now', { method: 'POST' })
+
+const importLibrary = async (data) =>
+  await listFetch('/import/library', { method: 'POST', body: JSON.stringify(data) })
+
+// Серия и таймкод по фильму. payload хранится как есть, формат задаёт плеер.
+const getWatchProgress = async (kpId) => await listFetch(`/progress/${encodeURIComponent(kpId)}`)
+const saveWatchProgress = async (kpId, payload) =>
+  await listFetch(`/progress/${encodeURIComponent(kpId)}`, { method: 'PUT', body: JSON.stringify({ payload }) })
+const getSyncStatus = async () => await listFetch('/sync/status')
+
 const updateUserName = async (name) => {
   const { data } = await apiCall((api) => api.put('/user/name', { name }))
   return data
@@ -153,5 +166,10 @@ export {
   getTGAuthResult,
   getUserLists,
   getListCounters,
+  getSyncStatus,
+  getWatchProgress,
+  importLibrary,
+  saveWatchProgress,
+  syncNow,
   updateUserName
 }

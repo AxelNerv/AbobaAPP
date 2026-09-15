@@ -17,6 +17,7 @@ const settingsStore = require('./settings.cjs')
 const adblock = require('./adblock.cjs')
 const { installLogger } = require('./logger.cjs')
 const backups = require('./backups.cjs')
+const playerProgress = require('./playerProgress.cjs')
 
 const APP_ROOT = path.join(__dirname, '..')
 const DIST_DIR = path.join(APP_ROOT, 'dist')
@@ -51,11 +52,24 @@ let quitting = false
 let settings = { authServerUrl: '', closeToTray: false, adblock: true }
 let appEnv = {}
 let maintenance = false
+let restorePlayerProgress = () => false
 const LOG_DIR = path.join(USER_DATA_DIR, 'logs')
+
+// Сервер входа и синхронизации по умолчанию: приложение работает сразу после
+// установки, без ручной настройки. Свой адрес по-прежнему можно указать в
+// «Приложение и Wi-Fi» или в .env — он важнее.
+const DEFAULT_AUTH_SERVER_URL = 'https://144-31-13-214.sslip.io:8443'
+// Серверы, которые выключены. Если адрес остался в настройках с тех времён,
+// молча переходим на сервер по умолчанию, иначе вход просто перестал бы работать.
+const RETIRED_AUTH_SERVER_URLS = new Set(['https://45-136-126-105.sslip.io:8443'])
+const authServerUrl = () => {
+  const own = settings.authServerUrl || appEnv.ABOBA_AUTH_SERVER_URL || ''
+  return own && !RETIRED_AUTH_SERVER_URLS.has(own.replace(/\/+$/, '')) ? own : DEFAULT_AUTH_SERVER_URL
+}
 
 const startConfiguredBackend = () => backend.startBackend(APP_ROOT, {
   // Секрет Docker-бота не передаётся клиентскому бэкенду.
-  AUTH_SERVER_URL: settings.authServerUrl || appEnv.ABOBA_AUTH_SERVER_URL || '',
+  AUTH_SERVER_URL: authServerUrl(),
   TMDB_API_KEY: appEnv.TMDB_API_KEY || ''
 }, DATA_DIR, { onStatus: reportBackendStatus })
 
@@ -120,6 +134,7 @@ const createWindow = () => {
   })
 
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  restorePlayerProgress = playerProgress.createRestorer(mainWindow.webContents)
 
   // Ссылки наружу открываем в системном браузере, а не внутри приложения
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -277,6 +292,17 @@ const handle = (channel, callback) => ipcMain.handle(channel, async (event, ...a
   return callback(...args)
 })
 
+// Серия и таймкод из плеера: читает и возвращает главный процесс,
+// хранит и синхронизирует бэкенд (страница отправляет туда сама).
+handle('player:read-progress', async (src) => {
+  try {
+    return await playerProgress.readProgress(mainWindow.webContents, String(src || ''))
+  } catch {
+    return null
+  }
+})
+handle('player:restore-progress', async (entries, src) => restorePlayerProgress(entries, String(src || '')))
+
 handle('share:status', async () => ({
   active: lanShare.isSharing(),
   url: lanShare.isSharing() ? lanShare.buildUrl() : null,
@@ -286,7 +312,9 @@ handle('share:status', async () => ({
   backendRunning: backend.isBackendRunning(),
   addresses: lanShare.getLanAddresses(),
   backend: backend.backendStatus(),
-  authConfigured: !!(settings.authServerUrl || appEnv.ABOBA_AUTH_SERVER_URL),
+  authConfigured: true,
+  authServerUrl: authServerUrl(),
+  defaultAuthServerUrl: DEFAULT_AUTH_SERVER_URL,
   settings,
   adblock: adblock.status()
 }))
@@ -347,6 +375,25 @@ handle('app:backup', async () => {
   } catch (err) { return { ok: false, error: err.message } }
   finally { maintenance = false }
 })
+// Файл импорта библиотеки (история из браузера и т.п.). Разбирает и сливает
+// его бэкенд; здесь только выбор файла — у страницы нет доступа к диску.
+handle('app:pick-import', async () => {
+  const selected = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Импорт библиотеки AbobaTV', extensions: ['json'] }]
+  })
+  if (selected.canceled) return { ok: false, canceled: true }
+  const file = selected.filePaths[0]
+  if (fs.statSync(file).size > 5 * 1024 * 1024) return { ok: false, error: 'Файл импорта слишком большой' }
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+    if (data?.format !== 'abobatv-import') return { ok: false, error: 'Это не файл импорта AbobaTV' }
+    return { ok: true, data }
+  } catch {
+    return { ok: false, error: 'Не удалось прочитать файл импорта' }
+  }
+})
+
 handle('app:restore', async () => {
   if (maintenance) return { ok: false, error: 'Дождитесь завершения текущей операции' }
   maintenance = true

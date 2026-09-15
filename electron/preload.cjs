@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openLogs: () => ipcRenderer.invoke('app:open-logs'),
   createBackup: () => ipcRenderer.invoke('app:backup'),
   restoreBackup: () => ipcRenderer.invoke('app:restore'),
+  pickImportFile: () => ipcRenderer.invoke('app:pick-import'),
+
+  // Позиция просмотра внутри плеера (серия, таймкод)
+  player: {
+    readProgress: (src) => ipcRenderer.invoke('player:read-progress', String(src || '')),
+    restoreProgress: (entries, src) => ipcRenderer.invoke('player:restore-progress', entries, String(src || ''))
+  },
 
   openExternal: (url) => ipcRenderer.send('app:open-external', String(url || '')),
 

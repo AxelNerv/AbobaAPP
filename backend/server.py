@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse
 from typing import Optional
 
 import aiohttp
+import sync
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -224,6 +225,8 @@ def migrate_from_json():
 # ──────────────────────────────────────────────
 init_db()
 migrate_from_json()
+with db() as _conn:
+    sync.migrate(_conn)
 
 pending_codes: dict = {}
 sessions: dict = {}
@@ -918,6 +921,13 @@ async def auth_poll(code: str):
             except (ValueError, TypeError, KeyError):
                 raise HTTPException(502, "Сервер входа вернул некорректный профиль")
             pending_codes.pop(code, None)
+            remote_token = result.get("token")
+            # Ключ сервера нужен для синхронизации библиотеки. Старый сервер
+            # без синхронизации его тоже отдаёт — вреда нет, /sync ответит 404.
+            if isinstance(remote_token, str) and 20 <= len(remote_token) <= 128:
+                with db() as conn:
+                    sync.reset_for_new_account(conn, payload["user"]["tg_id"], remote_token)
+                schedule_sync(payload["user"]["tg_id"], delay=0)
             return {"ok": True, **payload}
         finally:
             entry["polling"] = False
@@ -1055,20 +1065,29 @@ async def delete_broadcast(broadcast_id: int,
 # ──────────────────────────────────────────────
 #  USER LISTS — избранное и история
 # ──────────────────────────────────────────────
-ALLOWED_LIST_TYPES = {"favorites", "history"}
-MAX_LIST_SIZE = 500
+ALLOWED_LIST_TYPES = sync.LIST_KINDS
+_ITEM_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+
+def check_list_type(list_type: str) -> None:
+    if list_type not in ALLOWED_LIST_TYPES:
+        raise HTTPException(400, f"Неизвестный тип: {list_type}")
+
+
+def check_item_id(item_id: str) -> None:
+    if not _ITEM_ID_RE.match(item_id):
+        raise HTTPException(400, "Некорректный идентификатор")
 
 
 @app.get("/list/{list_type}")
 async def list_get_all(list_type: str,
                        authorization: Optional[str] = Header(None)):
-    if list_type not in ALLOWED_LIST_TYPES:
-        raise HTTPException(400, f"Неизвестный тип: {list_type}")
+    check_list_type(list_type)
     tg_id = auth_get_tg_id(authorization)
     with db() as conn:
         rows = conn.execute("""
             SELECT movie_json FROM user_lists
-            WHERE tg_id=? AND list_type=?
+            WHERE tg_id=? AND list_type=? AND deleted=0
             ORDER BY added_at DESC
         """, (tg_id, list_type)).fetchall()
     items = []
@@ -1083,58 +1102,270 @@ async def list_get_all(list_type: str,
 @app.put("/list/{list_type}/{item_id}")
 async def list_put(list_type: str, item_id: str, req: ListItemRequest,
                    authorization: Optional[str] = Header(None)):
-    if list_type not in ALLOWED_LIST_TYPES:
-        raise HTTPException(400, f"Неизвестный тип: {list_type}")
+    check_list_type(list_type)
+    check_item_id(item_id)
     tg_id = auth_get_tg_id(authorization)
-    movie_json = json.dumps(req.movie, ensure_ascii=False)
-
-    with db() as conn:
-        conn.execute("""
-            INSERT INTO user_lists (tg_id, list_type, kp_id, movie_json, added_at)
-            VALUES (?,?,?,?,datetime('now'))
-            ON CONFLICT(tg_id, list_type, kp_id) DO UPDATE SET
-                movie_json=excluded.movie_json,
-                added_at=datetime('now')
-        """, (tg_id, list_type, item_id, movie_json))
-
-        conn.execute("""
-            DELETE FROM user_lists
-            WHERE tg_id=? AND list_type=? AND id NOT IN (
-                SELECT id FROM user_lists
-                WHERE tg_id=? AND list_type=?
-                ORDER BY added_at DESC LIMIT ?
-            )
-        """, (tg_id, list_type, tg_id, list_type, MAX_LIST_SIZE))
-
-        size = conn.execute("""
-            SELECT COUNT(*) FROM user_lists WHERE tg_id=? AND list_type=?
-        """, (tg_id, list_type)).fetchone()[0]
-
+    try:
+        with db() as conn:
+            sync.local_put(conn, tg_id, list_type, item_id, req.movie)
+            sync.enforce_limits(conn, tg_id, server=False)
+            size = conn.execute("""
+                SELECT COUNT(*) FROM user_lists WHERE tg_id=? AND list_type=? AND deleted=0
+            """, (tg_id, list_type)).fetchone()[0]
+    except sync.SyncError as error:
+        raise HTTPException(400, str(error))
+    schedule_sync(tg_id)
     return {"ok": True, "size": size}
 
 
 @app.delete("/list/{list_type}/{item_id}")
 async def list_delete_one(list_type: str, item_id: str,
                           authorization: Optional[str] = Header(None)):
-    if list_type not in ALLOWED_LIST_TYPES:
-        raise HTTPException(400, f"Неизвестный тип: {list_type}")
+    check_list_type(list_type)
+    check_item_id(item_id)
     tg_id = auth_get_tg_id(authorization)
     with db() as conn:
-        removed = conn.execute("""
-            DELETE FROM user_lists
-            WHERE tg_id=? AND list_type=? AND kp_id=?
-        """, (tg_id, list_type, item_id)).rowcount
+        removed = sync.mark_deleted(conn, tg_id, list_type, item_id, server=False)
+    schedule_sync(tg_id)
     return {"ok": True, "removed": removed}
 
 
 @app.delete("/list/{list_type}")
 async def list_delete_all(list_type: str,
                           authorization: Optional[str] = Header(None)):
-    if list_type not in ALLOWED_LIST_TYPES:
-        raise HTTPException(400, f"Неизвестный тип: {list_type}")
+    check_list_type(list_type)
     tg_id = auth_get_tg_id(authorization)
     with db() as conn:
-        cleared = conn.execute("""
-            DELETE FROM user_lists WHERE tg_id=? AND list_type=?
-        """, (tg_id, list_type)).rowcount
+        keys = [row[0] for row in conn.execute(
+            "SELECT kp_id FROM user_lists WHERE tg_id=? AND list_type=? AND deleted=0",
+            (tg_id, list_type))]
+        cleared = sum(sync.mark_deleted(conn, tg_id, list_type, key, server=False) for key in keys)
+    schedule_sync(tg_id)
     return {"ok": True, "cleared": cleared}
+
+
+# ──────────────────────────────────────────────
+#  ПРОГРЕСС ПРОСМОТРА — серия и таймкод
+# ──────────────────────────────────────────────
+class ProgressRequest(BaseModel):
+    payload: dict
+
+
+@app.get("/progress/{item_id}")
+async def progress_get(item_id: str, authorization: Optional[str] = Header(None)):
+    check_item_id(item_id)
+    tg_id = auth_get_tg_id(authorization)
+    with db() as conn:
+        row = conn.execute(
+            "SELECT payload, updated_at FROM watch_progress WHERE tg_id=? AND kp_id=? AND deleted=0",
+            (tg_id, item_id)).fetchone()
+    if not row:
+        return {"payload": None}
+    return {"payload": json.loads(row["payload"] or "{}"), "updated_at": row["updated_at"]}
+
+
+@app.put("/progress/{item_id}")
+async def progress_put(item_id: str, req: ProgressRequest, authorization: Optional[str] = Header(None)):
+    check_item_id(item_id)
+    tg_id = auth_get_tg_id(authorization)
+    try:
+        with db() as conn:
+            sync.local_put(conn, tg_id, "progress", item_id, req.payload)
+            sync.enforce_limits(conn, tg_id, server=False)
+    except sync.SyncError as error:
+        raise HTTPException(400, str(error))
+    schedule_sync(tg_id)
+    return {"ok": True}
+
+
+# ──────────────────────────────────────────────
+#  СИНХРОНИЗАЦИЯ
+# ──────────────────────────────────────────────
+# Сервер (authority): POST /sync — принять изменения устройства и отдать чужие.
+# Приложение (client): фоновая отправка на сервер входа, POST /sync/now и
+# GET /sync/status для интерфейса.
+class SyncRequest(BaseModel):
+    cursor: int = 0
+    items: list = []
+
+
+_sync_rate: dict = {}
+SYNC_RATE_LIMIT = 120  # обменов в минуту на пользователя; приложению хватает с запасом
+
+
+@app.post("/sync")
+async def sync_exchange(req: SyncRequest, authorization: Optional[str] = Header(None)):
+    if AUTH_MODE == "client":
+        raise HTTPException(404, "Not Found")
+    tg_id = auth_get_tg_id(authorization)
+    minute = int(time.time() // 60)
+    bucket = _sync_rate.get(tg_id)
+    if not bucket or bucket[0] != minute:
+        bucket = [minute, 0]
+        _sync_rate[tg_id] = bucket
+    bucket[1] += 1
+    if bucket[1] > SYNC_RATE_LIMIT:
+        raise HTTPException(429, "Слишком частая синхронизация")
+    try:
+        with db() as conn:
+            return sync.server_exchange(conn, tg_id, req.cursor, req.items)
+    except sync.SyncError as error:
+        raise HTTPException(400, str(error))
+
+
+_sync_locks: dict = {}
+_sync_timers: dict = {}
+SYNC_INTERVAL_S = 60
+SYNC_DEBOUNCE_S = 3
+SYNC_MAX_ROUNDS = 20
+SYNC_AUTH_LOST = "Сервер не принял ключ синхронизации — войдите заново"
+
+
+class SyncAuthLost(Exception):
+    pass
+
+
+async def _remote_sync_call(remote_token: str, body: dict) -> dict:
+    session = await _get_http_session()
+    async with session.post(
+        f"{AUTH_SERVER_URL}/sync", json=body,
+        headers={"Authorization": f"Bearer {remote_token}"},
+        timeout=aiohttp.ClientTimeout(total=30), allow_redirects=False,
+    ) as response:
+        if response.status == 401:
+            raise SyncAuthLost()
+        if response.status == 404:
+            raise RuntimeError("Сервер входа не поддерживает синхронизацию — обновите его")
+        if response.status != 200:
+            raise RuntimeError(f"Сервер синхронизации ответил {response.status}")
+        data = await response.json()
+        if (not isinstance(data, dict) or not isinstance(data.get("items"), list)
+                or not isinstance(data.get("cursor"), int) or data["cursor"] < 0):
+            raise RuntimeError("Некорректный ответ сервера синхронизации")
+        return data
+
+
+async def sync_user(tg_id: int) -> dict:
+    """Отправить своё и забрать чужое. Безопасно вызывать сколько угодно раз."""
+    if AUTH_MODE != "client" or not AUTH_SERVER_URL:
+        return sync_status(tg_id)
+    lock = _sync_locks.setdefault(tg_id, asyncio.Lock())
+    async with lock:
+        with db() as conn:
+            account = conn.execute("SELECT * FROM sync_accounts WHERE tg_id=?", (tg_id,)).fetchone()
+        if not account:
+            return sync_status(tg_id)
+        token, cursor = account["remote_token"], account["cursor"]
+        error = None
+        try:
+            for _ in range(SYNC_MAX_ROUNDS):
+                with db() as conn:
+                    outgoing = sync.dirty_items(conn, tg_id)
+                data = await _remote_sync_call(token, {"cursor": cursor, "items": outgoing})
+                incoming = sync.validate_items(data["items"][:sync.MAX_ITEMS_PER_REQUEST])
+                with db() as conn:
+                    sync.clear_dirty(conn, tg_id, outgoing)
+                    sync.apply_items(conn, tg_id, incoming, server=False)
+                    cursor = max(cursor, data["cursor"])
+                    conn.execute("UPDATE sync_accounts SET cursor=? WHERE tg_id=?", (cursor, tg_id))
+                more = bool(data.get("more")) or len(data["items"]) > len(incoming)
+                if not more and len(outgoing) < sync.MAX_ITEMS_PER_REQUEST:
+                    break
+        except SyncAuthLost:
+            error = SYNC_AUTH_LOST
+        except sync.SyncError as exc:
+            error = f"Сервер прислал некорректные данные: {exc}"
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            error = "Нет связи с сервером синхронизации"
+        except RuntimeError as exc:
+            error = str(exc)
+        with db() as conn:
+            if error:
+                conn.execute("UPDATE sync_accounts SET last_error=? WHERE tg_id=?", (error, tg_id))
+            else:
+                conn.execute("UPDATE sync_accounts SET last_error=NULL, last_sync_at=? WHERE tg_id=?",
+                             (sync.now_ms(), tg_id))
+        if error:
+            print(f"[sync] {tg_id}: {error}")
+        return sync_status(tg_id)
+
+
+def sync_status(tg_id: int) -> dict:
+    with db() as conn:
+        account = conn.execute("SELECT last_sync_at, last_error FROM sync_accounts WHERE tg_id=?",
+                               (tg_id,)).fetchone()
+        pending = conn.execute(
+            "SELECT (SELECT COUNT(*) FROM user_lists WHERE tg_id=? AND dirty=1)"
+            " + (SELECT COUNT(*) FROM watch_progress WHERE tg_id=? AND dirty=1)",
+            (tg_id, tg_id)).fetchone()[0]
+    return {
+        "enabled": bool(account) and AUTH_MODE == "client" and bool(AUTH_SERVER_URL),
+        "last_sync_at": account["last_sync_at"] if account else None,
+        "error": account["last_error"] if account else None,
+        "pending": pending,
+    }
+
+
+def schedule_sync(tg_id: int, delay: float = SYNC_DEBOUNCE_S) -> None:
+    """Несколько изменений подряд — одна отправка через пару секунд."""
+    if AUTH_MODE != "client" or not AUTH_SERVER_URL:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    timer = _sync_timers.pop(tg_id, None)
+    if timer:
+        timer.cancel()
+
+    def run():
+        _sync_timers.pop(tg_id, None)
+        loop.create_task(sync_user(tg_id))
+
+    _sync_timers[tg_id] = loop.call_later(delay, run)
+
+
+async def _sync_forever():
+    while True:
+        await asyncio.sleep(SYNC_INTERVAL_S)
+        try:
+            with db() as conn:
+                users = [row[0] for row in conn.execute(
+                    "SELECT tg_id FROM sync_accounts WHERE last_error IS NULL OR last_error != ?",
+                    (SYNC_AUTH_LOST,))]
+            for tg_id in users:
+                await sync_user(tg_id)
+        except Exception as exc:  # фоновая задача не должна умереть молча навсегда
+            print(f"[sync] фоновая синхронизация: {exc}")
+
+
+@app.on_event("startup")
+async def start_background_sync():
+    if AUTH_MODE == "client" and AUTH_SERVER_URL:
+        asyncio.get_running_loop().create_task(_sync_forever())
+
+
+@app.post("/sync/now")
+async def sync_now(authorization: Optional[str] = Header(None)):
+    return await sync_user(auth_get_tg_id(authorization))
+
+
+@app.get("/sync/status")
+async def sync_status_endpoint(authorization: Optional[str] = Header(None)):
+    return sync_status(auth_get_tg_id(authorization))
+
+
+@app.post("/import/library")
+async def import_library(request: Request, authorization: Optional[str] = Header(None)):
+    tg_id = auth_get_tg_id(authorization)
+    body = await request.body()
+    if len(body) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Файл импорта слишком большой")
+    try:
+        data = json.loads(body)
+        with db() as conn:
+            stats = sync.import_library(conn, tg_id, data)
+    except (ValueError, sync.SyncError) as error:
+        raise HTTPException(400, str(error))
+    schedule_sync(tg_id, delay=0)
+    return {"ok": True, **stats}

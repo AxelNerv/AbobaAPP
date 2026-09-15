@@ -1,19 +1,24 @@
 # Сертификат Caddy получает сам по домену из ABOBA_AUTH_DOMAIN.
 #
-# HTTPS на 8443, а не на 443: на этом VPS порт 443 уже занят другой
-# программой (VPN), и Caddy с ним не запускался. Порт 80 свободен —
-# через него Let's Encrypt проверяет домен.
+# Порт HTTPS задаёт ABOBA_HTTPS_PORT (по умолчанию 8443): на серверах, где 443
+# уже занят (например, VPN), Caddy на нём не запустится. Порт 80 должен быть
+# свободен — через него Let's Encrypt проверяет домен.
 {
-	https_port 8443
+	https_port {$HTTPS_PORT}
 }
 
 {$AUTH_DOMAIN} {
 	encode gzip
 
-	# Приложению нужны только эти адреса (backend/server.py → remote_auth).
-	# /auth/confirm сюда не входит: бот стучится к нему по внутренней сети Docker.
-	@auth path /auth/init /auth/poll/* /auth/status
+	# Приложению нужны только эти адреса (backend/server.py → remote_auth
+	# и синхронизация библиотеки). /auth/confirm сюда не входит: бот стучится
+	# к нему по внутренней сети Docker.
+	@auth path /auth/init /auth/poll/* /auth/status /sync
 	handle @auth {
+		# Обмен синхронизации — не больше 500 записей по 32 КБ; с запасом.
+		request_body {
+			max_size 20MB
+		}
 		reverse_proxy auth:8000
 	}
 
