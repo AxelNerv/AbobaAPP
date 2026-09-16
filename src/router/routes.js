@@ -104,20 +104,7 @@ export const routes = [
     path: '/user',
     redirect: '/library'
   },
-  {
-    path: '/lists/:user_id?',
-    name: 'lists',
-    component: () => import('@/components/UserLists.vue'),
-    meta: {
-      title: 'AbobaTV - Списки'
-    }
-  },
-  {
-    path: '/auth-success',
-    name: 'auth-success',
-    component: () => import('@/components/AuthSuccess.vue'),
-    meta: {
-      title: 'AbobaTV - Вход'
-    }
-  }
+  // Старые страницы сайта, работавшие только через API rhserv.
+  { path: '/lists/:user_id?', redirect: '/library' },
+  { path: '/auth-success', redirect: '/' }
 ]

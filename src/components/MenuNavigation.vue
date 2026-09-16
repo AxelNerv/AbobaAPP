@@ -27,14 +27,12 @@
 import { useMainStore } from '@/store/main'
 import { useAuthStore } from '@/store/auth'
 import { useNavbarStore } from '@/store/navbar'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import DesktopMenu from './MenuNavigation/DesktopMenu.vue'
 import MobileMenu from './MenuNavigation/MobileMenu.vue'
 import ModalSearch from './ModalSearch.vue'
 import IdSearchModal from './IdSearchModal.vue'
 import RandomMovieModal from './RandomMovieModal.vue'
-import { getBaseURLSync, getBaseURL } from '@/api/axios'
-import { getUser } from '@/api/user'
 import { getRandomMovie } from '@/api/movies'
 import { handleApiError } from '@/constants'
 
@@ -115,7 +113,11 @@ const enrichDescription = async (id, baseResponse) => {
   } catch { /* ignore */ }
 }
 
-const initializeNavLinks = (baseURL) => {
+const initializeNavLinks = () => {
+  // Аватар из Telegram — абсолютная https-ссылка. Раньше к нему приклеивался
+  // адрес старого API, и картинка не открывалась.
+  const photo = authStore.user?.photo
+  const avatar = typeof photo === 'string' && photo.startsWith('https://') ? photo : 'user'
   const links = [
     // icon — смысловое имя из таблицы AppIcon. Аватар пользователя остаётся
     // ссылкой (http…), меню различает их по префиксу.
@@ -125,11 +127,7 @@ const initializeNavLinks = (baseURL) => {
     {
       to: authStore.user ? '/library' : '/login',
       exact: true,
-      icon: authStore.user
-        ? authStore.user.photo
-          ? `${baseURL}${authStore.user.photo}`
-          : 'user'
-        : 'user',
+      icon: authStore.user ? avatar : 'user',
       text: authStore.user ? 'Моя библиотека' : 'Войти'
     },
     { icon: 'random', text: 'Случайный фильм', action: openRandom },
@@ -141,24 +139,10 @@ const initializeNavLinks = (baseURL) => {
   navLinks.value = links
 }
 
-const baseURL = getBaseURLSync()
-initializeNavLinks(baseURL)
-
-onMounted(async () => {
-  if (authStore.token && !authStore.user) {
-    try {
-      let user = await getUser()
-      authStore.setUser(user)
-      const updatedBaseURL = await getBaseURL()
-      initializeNavLinks(updatedBaseURL)
-    } catch (error) {
-      const { code } = handleApiError(error)
-      if (code === 401) {
-        console.warn('getUser() returned 401, likely local token — keeping session')
-      }
-    }
-  }
-})
+initializeNavLinks()
+// Профиль приходит при входе через Telegram и хранится локально; раньше при его
+// отсутствии меню спрашивало мёртвый API rhserv. Теперь просто перерисовываемся.
+watch(() => authStore.user, initializeNavLinks)
 </script>
 
 <style scoped>

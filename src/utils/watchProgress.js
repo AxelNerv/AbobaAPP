@@ -5,7 +5,9 @@
  * - Playerjs (TURBO и др.): ключ pljsplayfrom_…, значение
  *   «{xxx-сезон-серия-озвучка}секунды--длительность--время сохранения».
  *   Номера в плейлисте с нуля, у фильма вместо сезона просто «{x-озвучка}».
- * - Kodik: serial-last-episode = {"id": {"s": сезон, "e": серия}}.
+ * - Alloha: save-<id> = JSON с serial.season, serial.episode и time.
+ * - Collaps: vp<id фильма> = «сезон:серия».
+ * - Kodik: serial-progress = {"id": {"s", "e", "p": секунды}} или serial-last-episode = {"id": {"s": сезон, "e": серия}}.
  * - Ylitron и похожие: под числовым ключом JSON с season, episode, playBack.
  */
 const PLAYFROM_RE = /^(?:\{([^}]*)\})?([0-9.]+)--([0-9.]+)(?:--([0-9]+))?$/
@@ -41,6 +43,35 @@ export const summarizeProgress = (entries = {}) => {
     if (parsed && (!best || parsed.savedAt > best.savedAt)) best = parsed
   }
   if (best) return best
+
+  // Alloha: save-<id фильма> = {"serial":{"season":1,"episode":6},"time":609.2,...}
+  for (const [key, value] of Object.entries(entries || {})) {
+    if (!key.startsWith('save-')) continue
+    const data = parseJson(value)
+    if (!data || typeof data !== 'object') continue
+    const time = Number(data.time)
+    const season = Number(data.serial?.season) || null
+    const episode = Number(data.serial?.episode) || null
+    if (episode || Number.isFinite(time)) {
+      return { season, episode, time: Number.isFinite(time) ? time : null, duration: null, savedAt: 0 }
+    }
+  }
+
+  // Collaps: vp<id фильма> = «сезон:серия»
+  for (const [key, value] of Object.entries(entries || {})) {
+    const match = /^vp\d+$/.test(key) && /^(\d+):(\d+)$/.exec(String(value))
+    if (match && Number(match[1]) > 0 && Number(match[2]) > 0) {
+      return { season: Number(match[1]), episode: Number(match[2]), time: null, duration: null, savedAt: 0 }
+    }
+  }
+
+  // Kodik: serial-progress = {"id": {"s": сезон, "e": серия, "p": секунды}}
+  const kodikProgress = parseJson(entries?.['serial-progress'])
+  const current = kodikProgress && typeof kodikProgress === 'object' ? Object.values(kodikProgress)[0] : null
+  if (current && Number(current.s) > 0 && Number(current.e) > 0) {
+    const time = Number(current.p)
+    return { season: Number(current.s), episode: Number(current.e), time: Number.isFinite(time) ? time : null, duration: null, savedAt: 0 }
+  }
 
   const kodik = parseJson(entries?.['serial-last-episode'])
   const last = kodik && typeof kodik === 'object' ? Object.values(kodik)[0] : null

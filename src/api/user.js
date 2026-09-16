@@ -1,4 +1,3 @@
-import { getApi } from '@/api/axios'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 import { getBackendUrl } from './backendUrl'
 
@@ -84,29 +83,6 @@ const getMyLists = async (type) => {
   return await normalizeMovieListResponse(items, { enrichMissingSeo: false })
 }
 
-// ──────────────────────────────────────────────
-// Прочее (на rhserv через axios)
-// ──────────────────────────────────────────────
-const apiCall = async (callFn) => {
-  const api = await getApi()
-  return await callFn(api)
-}
-
-const getUserLists = async (type, userId) => {
-  const { data } = await apiCall((api) => api.get(`/user-list/${userId}/${type}`))
-  return await normalizeMovieListResponse(data, { enrichMissingSeo: false })
-}
-
-const getListCounters = async (userId) => {
-  const { data } = await apiCall((api) => api.get(`/user-list-counters/${userId}`))
-  return data
-}
-
-const getUser = async () => {
-  const { data } = await apiCall((api) => api.get('/user'))
-  return data
-}
-
 const generateToken = async () => {
   const response = await fetch(`${getBackendUrl()}/auth/init`, { signal: AbortSignal.timeout(15000) })
   if (!response.ok) {
@@ -151,25 +127,16 @@ const saveWatchProgress = async (kpId, payload) =>
   await listFetch(`/progress/${encodeURIComponent(kpId)}`, { method: 'PUT', body: JSON.stringify({ payload }) })
 const getSyncStatus = async () => await listFetch('/sync/status')
 
-const updateUserName = async (name) => {
-  const { data } = await apiCall((api) => api.put('/user/name', { name }))
-  return data
-}
-
 export {
   addToList,
   getMyLists,
-  getUser,
   delAllFromList,
   delFromList,
   generateToken,
   getTGAuthResult,
-  getUserLists,
-  getListCounters,
   getSyncStatus,
   getWatchProgress,
   importLibrary,
   saveWatchProgress,
-  syncNow,
-  updateUserName
+  syncNow
 }

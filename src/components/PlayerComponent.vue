@@ -963,7 +963,7 @@ const loadSavedProgress = async () => {
   const players = savedProgress.value?.players || {}
   await Promise.all(
     Object.entries(players).map(([family, saved]) =>
-      saved?.entries ? sendRestore(saved.entries, `https://player.${family}/`) : null
+      saved?.entries ? sendRestore(saved.frames || saved.entries, `https://player.${family}/`) : null
     )
   )
 }
@@ -984,7 +984,9 @@ const restoreProgressFor = (player) => {
   const family = playerFamily(player?.iframe)
   const saved = savedProgress.value?.players?.[family]
   if (!progressSupported || !saved?.entries) return
-  sendRestore(saved.entries, player.iframe)
+  // frames — записи по окнам плеера (VIBIX хранит позицию во вложенном окне);
+  // у позиций, сохранённых раньше, есть только общий набор entries.
+  sendRestore(saved.frames || saved.entries, player.iframe)
 }
 
 const saveProgress = async () => {
@@ -1008,7 +1010,13 @@ const saveProgress = async () => {
     v: 1,
     players: {
       ...current.players,
-      [family]: { entries, summary, player: selectedPlayerInternal.value?.key || '', saved_at: Date.now() }
+      [family]: {
+        entries,
+        frames: snapshot.frames || null,
+        summary,
+        player: selectedPlayerInternal.value?.key || '',
+        saved_at: Date.now()
+      }
     },
     summary: summary || current.summary || null,
     updated_player: family

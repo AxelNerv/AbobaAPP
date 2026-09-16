@@ -24,6 +24,22 @@ describe('summarizeProgress', () => {
     expect(formatProgress(summary)).toBe('1:16:59')
   })
 
+  it('reads Alloha save record', () => {
+    const summary = summarizeProgress({
+      'save-1efc2a67899bd83bd7dd6c44c3ae99': '{"translation":"LostFilm","serial":{"season":1,"episode":6},"time":609.246455}'
+    })
+    expect(formatProgress(summary)).toBe('1 сезон · 6 серия · 10:09')
+  })
+
+  it('reads Collaps season:episode', () => {
+    expect(formatProgress(summarizeProgress({ vp1285: '1:6', 'player.totalTime': '42' }))).toBe('1 сезон · 6 серия')
+  })
+
+  it('reads Kodik serial progress', () => {
+    const summary = summarizeProgress({ 'serial-progress': '{"52142":{"s":1,"e":15,"p":641,"t":609}}' })
+    expect(formatProgress(summary)).toBe('1 сезон · 15 серия · 10:41')
+  })
+
   it('reads Kodik last episode', () => {
     const summary = summarizeProgress({ 'serial-last-episode': '{"55172":{"s":2,"e":1}}' })
     expect(formatProgress(summary)).toBe('2 сезон · 1 серия')
