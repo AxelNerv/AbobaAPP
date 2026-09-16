@@ -23,6 +23,17 @@
         <button class="share-toggle" :disabled="busy || !settingsReady" @click="saveSettings">Сохранить настройки</button>
         <p v-if="status.authServerUrl" class="share-hint">Используется: {{ status.authServerUrl }}</p>
       </div>
+      <div v-if="updateState.supported" class="share-card">
+        <div class="share-row-title">Обновления</div>
+        <p class="share-hint">Версия {{ updateState.current }}. {{ updateText }}</p>
+        <p v-if="updateState.error" class="share-error">{{ updateState.error }}</p>
+        <div class="settings-actions">
+          <button class="share-copy" :disabled="updateState.state === 'checking' || updateState.state === 'downloading'" @click="checkForUpdates">Проверить обновления</button>
+          <button v-if="hasPendingUpdate()" class="share-toggle" :disabled="updateState.state === 'downloading'" @click="installUpdate">{{ updateActionLabel() }}</button>
+        </div>
+        <p v-if="hasPendingUpdate() && updateState.installable" class="share-hint">Приложение закроется на несколько секунд, обновится и откроется снова. История и настройки сохранятся.</p>
+        <p v-else-if="hasPendingUpdate()" class="share-hint">Эта копия запущена из папки, а не установлена, поэтому обновить её на месте нельзя — скачай установщик новой версии.</p>
+      </div>
       <div class="share-card">
         <div class="share-row-title">Данные и диагностика</div>
         <p class="share-hint">{{ status.backendRunning === null ? 'Проверяем локальный сервер…' : status.backendRunning ? 'Локальный сервер работает' : 'Локальный сервер недоступен' }}</p>
@@ -114,6 +125,7 @@ import { ref, onMounted, computed } from 'vue'
 import QrcodeVue from 'qrcode.vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { importLibrary } from '@/api/user'
+import { checkForUpdates, hasPendingUpdate, installUpdate, startUpdateWatch, updateActionLabel, updateState } from '@/utils/appUpdates'
 
 const isApp = computed(() => typeof window !== 'undefined' && !!window.electronAPI)
 
@@ -202,6 +214,17 @@ const perform = async (action, success = '') => {
 }
 const saveSettings = () => perform(() => window.electronAPI.saveSettings({ authServerUrl: authServerUrl.value, closeToTray: closeToTray.value, adblock: adblock.value }), 'Настройки сохранены')
 const backup = () => perform(() => window.electronAPI.createBackup(), (result) => `Резервная копия сохранена: ${result.file}`)
+const updateText = computed(() => {
+  switch (updateState.state) {
+    case 'checking': return 'Проверяем…'
+    case 'latest': return 'Установлена последняя версия.'
+    case 'available': return `Доступна версия ${updateState.version}.`
+    case 'downloading': return `Скачиваем версию ${updateState.version}: ${updateState.percent}%`
+    case 'downloaded': return `Версия ${updateState.version} скачана.`
+    default: return ''
+  }
+})
+startUpdateWatch()
 const restore = () => perform(() => window.electronAPI.restoreBackup(), 'Копия восстановлена')
 const importFile = () => perform(async () => {
   const picked = await window.electronAPI.pickImportFile()

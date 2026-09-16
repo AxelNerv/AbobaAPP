@@ -34,6 +34,18 @@
               class="notif-item"
             >
               <div class="notif-text">{{ n.text }}</div>
+              <template v-if="n.kind === 'update' && isActiveUpdate(n)">
+                <button
+                  class="update-btn"
+                  :disabled="updateState.state === 'downloading'"
+                  @click="installUpdate"
+                >
+                  {{ updateActionLabel() }}
+                </button>
+                <div v-if="updateState.state === 'error' && updateState.error" class="update-error">
+                  {{ updateState.error }}
+                </div>
+              </template>
               <div class="notif-time">{{ formatTime(n.createdAt) }}</div>
             </div>
           </div>
@@ -47,6 +59,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useAuthStore } from '@/store/auth'
+import {
+  hasPendingUpdate,
+  installUpdate,
+  onUpdateState,
+  startUpdateWatch,
+  updateActionLabel,
+  updateState
+} from '@/utils/appUpdates'
 
 const authStore = useAuthStore()
 
@@ -139,6 +159,23 @@ const handleClickOutside = (e) => {
   }
 }
 
+// ───────── Обновление приложения ─────────
+// Одно уведомление на версию: повторные проверки раз в несколько часов
+// не должны засыпать колокольчик одинаковыми сообщениями.
+const isActiveUpdate = (n) => hasPendingUpdate() && n.version === updateState.version
+
+const noteUpdate = (state) => {
+  if (!hasPendingUpdate(state)) return
+  const id = `update-${state.version}`
+  if (notifications.value.some((n) => n.id === id)) return
+  notifications.value = [
+    { id, kind: 'update', version: state.version, text: `Доступно обновление AbobaTV ${state.version}`, createdAt: Date.now() },
+    ...notifications.value
+  ].slice(0, 50)
+  saveNotifications()
+}
+let stopUpdateWatch = null
+
 // ───────── Подгружаем глобальные уведомления от админа ─────────
 let broadcastsPollId = null
 const BROADCASTS_SEEN_KEY = 'abobatv_broadcasts_last_seen'
@@ -181,11 +218,15 @@ onMounted(() => {
   // Поллим глобальные уведомления от админа раз в 30 сек
   fetchBroadcasts()
   broadcastsPollId = setInterval(fetchBroadcasts, 60000)
+  stopUpdateWatch = onUpdateState(noteUpdate)
+  startUpdateWatch()
+  noteUpdate(updateState)
 })
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   delete window.__addNotification
   if (broadcastsPollId) clearInterval(broadcastsPollId)
+  stopUpdateWatch?.()
 })
 </script>
 
@@ -310,6 +351,26 @@ onUnmounted(() => {
 .notif-time {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.3);
+}
+.update-btn {
+  margin: 4px 0 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--accent-color, #00e5ff);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.update-error {
+  font-size: 11px;
+  color: #ff8aa8;
+  margin-bottom: 4px;
 }
 
 .popup-enter-active,

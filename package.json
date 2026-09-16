@@ -1,6 +1,6 @@
 {
   "name": "abobatv",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,6 +21,7 @@
     "@unhead/vue": "^2.1.12",
     "axios": "^1.13.6",
     "dompurify": "^3.3.3",
+    "electron-updater": "6.8.9",
     "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
@@ -108,6 +109,14 @@
       "shortcutName": "AbobaTV",
       "createDesktopShortcut": true,
       "artifactName": "AbobaTV-Setup-${version}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AxelNerv",
+        "repo": "AbobaAPP",
+        "releaseType": "release"
+      }
+    ]
   }
 }

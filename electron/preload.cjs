@@ -52,6 +52,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restoreProgress: (entries, src) => ipcRenderer.invoke('player:restore-progress', entries, String(src || ''))
   },
 
+  // Обновления из выпусков GitHub
+  updates: {
+    status: () => ipcRenderer.invoke('update:status'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onStatus: (callback) => subscribe('app:update-status', callback)
+  },
+
   openExternal: (url) => ipcRenderer.send('app:open-external', String(url || '')),
 
   version: () => ipcRenderer.invoke('app:version')

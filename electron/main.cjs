@@ -18,6 +18,7 @@ const adblock = require('./adblock.cjs')
 const { installLogger } = require('./logger.cjs')
 const backups = require('./backups.cjs')
 const playerProgress = require('./playerProgress.cjs')
+const updater = require('./updater.cjs')
 
 const APP_ROOT = path.join(__dirname, '..')
 const DIST_DIR = path.join(APP_ROOT, 'dist')
@@ -257,6 +258,16 @@ ${err.message}`)
     tray.on('double-click', showMainWindow)
   } catch (err) { console.warn('Трей недоступен:', err.message) }
 
+  updater.init(app, {
+    onStatus: (state) => mainWindow?.webContents.send('app:update-status', state),
+    // Установщику нужны свободные файлы: трей не должен перехватить закрытие,
+    // а Python-бэкенд — держать папку приложения.
+    beforeInstall: () => {
+      quitting = true
+      backend.stopBackend()
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -339,6 +350,9 @@ handle('share:open-firewall', async () => {
 })
 
 handle('app:version', () => app.getVersion())
+handle('update:status', () => ({ ...updater.status(), current: app.getVersion() }))
+handle('update:check', async () => ({ ...(await updater.check()), current: app.getVersion() }))
+handle('update:install', () => updater.install())
 handle('app:open-logs', () => shell.openPath(LOG_DIR))
 handle('app:settings', async (next) => {
   if (maintenance) return { ok: false, error: 'Дождитесь завершения текущей операции' }
