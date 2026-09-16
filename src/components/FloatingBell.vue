@@ -1,6 +1,7 @@
 <template>
-  <div v-if="authStore.token" class="floating-bell-wrapper">
+  <div v-if="authStore.token || isDesktopApp" class="floating-bell-wrapper">
     <button
+      v-if="authStore.token"
       class="bell-btn"
       :class="{ 'has-unread': hasUnread }"
       :title="hasUnread ? `Уведомлений: ${notifications.length}` : 'Уведомления'"
@@ -52,6 +53,12 @@
         </div>
       </div>
     </transition>
+
+    <!-- Настройки приложения: такой же кружок слева от колокольчика
+         (row-reverse: в разметке после колокольчика, на экране — левее) -->
+    <router-link v-if="isDesktopApp" to="/settings" class="bell-btn settings-btn" title="Настройки">
+      <AppIcon name="settings" :size="19" />
+    </router-link>
   </div>
 </template>
 
@@ -69,6 +76,7 @@ import {
 } from '@/utils/appUpdates'
 
 const authStore = useAuthStore()
+const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
 
 const isOpen = ref(false)
 const notifications = ref(loadNotifications())
@@ -236,6 +244,16 @@ onUnmounted(() => {
   top: 16px;
   right: 20px;
   z-index: 100;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 8px;
+}
+.settings-btn { text-decoration: none; box-sizing: border-box; }
+.settings-btn.router-link-active {
+  color: var(--accent-color);
+  border-color: rgba(0, 229, 255, 0.55);
+  background: rgba(0, 229, 255, 0.1);
 }
 
 .bell-btn {

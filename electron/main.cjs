@@ -8,6 +8,7 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, dialog, Tray, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 
 const backend = require('./backend.cjs')
 const lanShare = require('./lanShare.cjs')
@@ -57,15 +58,33 @@ let restorePlayerProgress = () => false
 const LOG_DIR = path.join(USER_DATA_DIR, 'logs')
 
 // Сервер входа и синхронизации по умолчанию: приложение работает сразу после
-// установки, без ручной настройки. Свой адрес по-прежнему можно указать в
-// «Приложение и Wi-Fi» или в .env — он важнее.
-const DEFAULT_AUTH_SERVER_URL = 'https://144-31-13-214.sslip.io:8443'
-// Серверы, которые выключены. Если адрес остался в настройках с тех времён,
-// молча переходим на сервер по умолчанию, иначе вход просто перестал бы работать.
-const RETIRED_AUTH_SERVER_URLS = new Set(['https://45-136-126-105.sslip.io:8443'])
+// установки, без ручной настройки. Адрес не хранится в исходниках (репозиторий
+// публичный): его кладут в electron/server.local.json перед сборкой, файл
+// в git не попадает. Свой адрес в настройках или .env важнее.
+const DEFAULT_AUTH_SERVER_URL = (() => {
+  try {
+    const url = JSON.parse(fs.readFileSync(path.join(__dirname, 'server.local.json'), 'utf8')).authServerUrl
+    return typeof url === 'string' ? settingsStore.validateAuthUrl(url) : ''
+  } catch {
+    return ''
+  }
+})()
+// Выключенные серверы — по отпечатку SHA-256, чтобы не светить их адреса.
+// Если такой адрес остался в настройках, забываем его: иначе вход перестал бы работать.
+const RETIRED_AUTH_SERVER_HASHES = new Set(['1af2f1891a65a76b467952bdd0773eb1f8c5314abe366eb6ed5109484f85d7e8'])
+const isRetiredAuthUrl = (url) =>
+  !!url && RETIRED_AUTH_SERVER_HASHES.has(crypto.createHash('sha256').update(url.replace(/\/+$/, '')).digest('hex'))
+const loadSettings = () => {
+  const loaded = settingsStore.readSettings(USER_DATA_DIR)
+  if (isRetiredAuthUrl(loaded.authServerUrl)) {
+    loaded.authServerUrl = ''
+    settingsStore.saveSettings(USER_DATA_DIR, loaded)
+  }
+  return loaded
+}
 const authServerUrl = () => {
-  const own = settings.authServerUrl || appEnv.ABOBA_AUTH_SERVER_URL || ''
-  return own && !RETIRED_AUTH_SERVER_URLS.has(own.replace(/\/+$/, '')) ? own : DEFAULT_AUTH_SERVER_URL
+  const own = settings.authServerUrl || (isRetiredAuthUrl(appEnv.ABOBA_AUTH_SERVER_URL) ? '' : appEnv.ABOBA_AUTH_SERVER_URL) || ''
+  return own || DEFAULT_AUTH_SERVER_URL
 }
 
 const startConfiguredBackend = () => backend.startBackend(APP_ROOT, {
@@ -206,7 +225,7 @@ app.whenReady().then(async () => {
 
   appEnv = readEnv()
   installLogger(LOG_DIR, Object.entries(appEnv).filter(([key]) => /TOKEN|KEY|SECRET|PASSWORD/.test(key)).map(([, value]) => value))
-  settings = settingsStore.readSettings(USER_DATA_DIR)
+  settings = loadSettings()
   const moved = app.commandLine.hasSwitch('no-legacy-import') ? null : appData.migrateLegacyData({ dataDir: DATA_DIR, legacyDir: LEGACY_DATA_DIR })
   if (moved?.migrated) console.log('[data] база перенесена в', DATA_DIR, '| копия:', moved.backupDir)
   if (moved?.error) throw new Error(`Перенос базы не удался: ${moved.error}. Исходные данные сохранены.`)
@@ -323,9 +342,9 @@ handle('share:status', async () => ({
   backendRunning: backend.isBackendRunning(),
   addresses: lanShare.getLanAddresses(),
   backend: backend.backendStatus(),
-  authConfigured: true,
-  authServerUrl: authServerUrl(),
-  defaultAuthServerUrl: DEFAULT_AUTH_SERVER_URL,
+  // Сам адрес окну не отдаём: показывать его незачем.
+  authConfigured: !!authServerUrl(),
+  authCustom: !!settings.authServerUrl,
   settings,
   adblock: adblock.status()
 }))
@@ -421,7 +440,7 @@ handle('app:restore', async () => {
     backend.stopBackend()
     stopped = true
     await backups.runBackup(APP_ROOT, 'restore', USER_DATA_DIR, selected.filePaths[0])
-    settings = settingsStore.readSettings(USER_DATA_DIR)
+    settings = loadSettings()
     adblock.setEnabled(settings.adblock)
     await startConfiguredBackend()
     stopped = false

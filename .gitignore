@@ -63,3 +63,6 @@ BACKLOG.md
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Адрес сервера входа по умолчанию — не публикуем (см. electron/server.local.example.json)
+electron/server.local.json

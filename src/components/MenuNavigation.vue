@@ -136,7 +136,7 @@ const initializeNavLinks = (baseURL) => {
     { icon: 'fingerprint', text: 'Поиск по ID', action: () => navbarStore.openIdSearchModal() }
   ]
 
-  // Настройки приложения — шестерёнка внизу боковой панели (DesktopMenu).
+  // Настройки приложения — шестерёнка рядом с колокольчиком (FloatingBell).
 
   navLinks.value = links
 }
