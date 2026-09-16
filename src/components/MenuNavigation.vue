@@ -84,7 +84,7 @@ const fetchRandom = async (opts = {}) => {
  * Прерывается как только какой-то вернул текст.
  */
 const enrichDescription = async (id, baseResponse) => {
-  // Источник 1 — rhserv /kp_info2
+  // Источник 1 — kinobd (getKpInfo)
   try {
     const { getKpInfo } = await import('@/api/movies')
     const kpInfo = await getKpInfo(id)
@@ -136,10 +136,7 @@ const initializeNavLinks = (baseURL) => {
     { icon: 'fingerprint', text: 'Поиск по ID', action: () => navbarStore.openIdSearchModal() }
   ]
 
-  // Раздача по Wi-Fi нужна только в приложении: в браузере включать нечего.
-  if (typeof window !== 'undefined' && window.electronAPI) {
-    links.push({ to: '/share', icon: 'globe', text: 'Раздать по Wi-Fi' })
-  }
+  // Настройки приложения — шестерёнка внизу боковой панели (DesktopMenu).
 
   navLinks.value = links
 }

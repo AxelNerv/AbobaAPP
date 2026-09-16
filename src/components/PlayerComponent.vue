@@ -269,7 +269,6 @@
 <script setup>
 import {
   getPlayers,
-  getShikiPlayers,
   searchKinoBDPlayerCandidates,
   getKinoBDPlayerDataByInid
 } from '@/api/movies'
@@ -328,9 +327,7 @@ const isMobile = computed(() => mainStore.isMobile)
 // «Открыто в приложении» — для кнопки «Открыть в приложении»,
 // которой внутри самого приложения быть не должно.
 const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
-const isKinoBdProvider = computed(
-  () => mainStore.contentApiProvider === 'kinobd' && !String(props.kpId || '').startsWith('shiki')
-)
+const isKinoBdProvider = computed(() => mainStore.contentApiProvider === 'kinobd')
 
 const activeTooltip = ref(null)
 const tooltipHovered = ref(false)
@@ -418,12 +415,10 @@ const BLOCKED_PLAYERS = ['FLIXCDN']
 
 // Приоритет плееров: чем раньше в списке — тем выше (и тем вероятнее станет дефолтным).
 // Turbo — самый стабильный/быстрый, поэтому он первый для обычного кино.
-// Для аниме (shiki) первым идёт aniboom — он быстрый, kodik как запас.
 const PLAYER_PRIORITY = ['TURBO', 'COLLAPS', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
-const ANIME_PLAYER_PRIORITY = ['ANIBOOM', 'KODIK', 'TURBO', 'COLLAPS', 'VIBIX']
 
-const playerPriorityIndex = (player, isAnime) => {
-  const list = isAnime ? ANIME_PLAYER_PRIORITY : PLAYER_PRIORITY
+const playerPriorityIndex = (player) => {
+  const list = PLAYER_PRIORITY
   const name = normalizeKey(`${getProviderDisplayName(player)} ${player.key}`)
   const idx = list.findIndex((p) => name.includes(p))
   // Не найденные — в конец, но сохраняя исходный порядок
@@ -468,8 +463,7 @@ const applyPlayersData = (players) => {
 
   // Сортируем по приоритету (стабильная сортировка сохраняет исходный порядок
   // для плееров с одинаковым приоритетом)
-  const isAnime = String(props.kpId || '').startsWith('shiki')
-  dedupedPlayers.sort((a, b) => playerPriorityIndex(a, isAnime) - playerPriorityIndex(b, isAnime))
+  dedupedPlayers.sort((a, b) => playerPriorityIndex(a) - playerPriorityIndex(b))
 
   playersInternal.value = dedupedPlayers
   // Новый список плееров — сбрасываем историю авто-скипов
@@ -556,26 +550,20 @@ const fetchPlayers = async () => {
     errorMessage.value = ''
     errorCode.value = null
 
-    let players
     // Таймаут 20 секунд — учитываем VPN пользователей у которых загрузка медленнее
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), 20000)
     )
 
-    if (props.kpId.startsWith('shiki')) {
-      const cleanShikiId = props.kpId.replace('shiki', '')
-      players = await Promise.race([getShikiPlayers(cleanShikiId), timeout])
-    } else {
-      const savedInid = playerStore.kinobdSourceByKpId?.[String(props.kpId)] || null
-      players = await Promise.race([
-        getPlayers(props.kpId, {
-          mode: 'kp_id',
-          usePlayerData: true,
-          forceInid: isKinoBdProvider.value ? savedInid : null
-        }),
-        timeout
-      ])
-    }
+    const savedInid = playerStore.kinobdSourceByKpId?.[String(props.kpId)] || null
+    const players = await Promise.race([
+      getPlayers(props.kpId, {
+        mode: 'kp_id',
+        usePlayerData: true,
+        forceInid: isKinoBdProvider.value ? savedInid : null
+      }),
+      timeout
+    ])
     applyPlayersData(players)
     // Если после всех источников плееров нет — останавливаем спираль
     if (playersInternal.value.length === 0) {

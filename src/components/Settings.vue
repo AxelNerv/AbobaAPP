@@ -77,10 +77,6 @@
         <h2>API</h2>
         <div class="radio-group">
           <label class="radio">
-            <input v-model="contentApiProvider" type="radio" value="rhserv" />
-            <span class="radio-label">RHServ (original API)</span>
-          </label>
-          <label class="radio">
             <input v-model="contentApiProvider" type="radio" value="kinobd" />
             <span class="radio-label">KinoBD (search/cards/players)</span>
           </label>
@@ -90,21 +86,8 @@
           </label>
         </div>
         <p class="api-note">
-          RHServ: полный функционал (комментарии, тайминги, рейтинги). KinoBD: поиск/карточки/плееры.
-          Неподдерживаемые функции автоматически идут через RHServ.
+          KinoBD используется для поиска, карточек и плееров. Kinobox доступен как источник плееров.
         </p>
-        <h3 class="api-subtitle">API для поиска</h3>
-        <div class="radio-group">
-          <label class="radio">
-            <input v-model="searchApiProvider" type="radio" value="rhserv" />
-            <span class="radio-label">RHServ (по умолчанию)</span>
-          </label>
-          <label class="radio">
-            <input v-model="searchApiProvider" type="radio" value="kinobd" />
-            <span class="radio-label">KinoBD</span>
-          </label>
-        </div>
-        <p class="api-note">Этот параметр влияет только на поиск по названию.</p>
         <div class="settings-actions">
           <button class="reset-button" @click="resetKinoBdSources">
             <AppIcon name="reset" :size="15" />
@@ -138,12 +121,6 @@
       <div class="settings-group">
         <h2>Навигация</h2>
         <SliderRound v-model="rememberScrollPosition">Запоминать позицию скролла</SliderRound>
-      </div>
-
-      <div class="settings-group">
-        <h2>Комментарии</h2>
-        <SliderRound v-model="isCommentsEnabled">Показывать блок комментариев</SliderRound>
-        <SliderRound v-model="isAutoShowComments">Автоматически показывать комментарии</SliderRound>
       </div>
 
       <div class="settings-group">
@@ -240,11 +217,6 @@ const contentApiProvider = computed({
   set: (value) => mainStore.setContentApiProvider(value)
 })
 
-const searchApiProvider = computed({
-  get: () => mainStore.searchApiProvider,
-  set: (value) => mainStore.setSearchApiProvider(value)
-})
-
 const isCtrlFEnabled = computed({
   get: () => mainStore.isCtrlFEnabled,
   set: () => mainStore.toggleCtrlF()
@@ -253,16 +225,6 @@ const isCtrlFEnabled = computed({
 const showFavoriteTooltip = computed({
   get: () => playerStore.showFavoriteTooltip,
   set: (value) => playerStore.setFavoriteTooltip(value)
-})
-
-const isCommentsEnabled = computed({
-  get: () => mainStore.isCommentsEnabled,
-  set: (value) => mainStore.setCommentsEnabled(value)
-})
-
-const isAutoShowComments = computed({
-  get: () => mainStore.isAutoShowComments,
-  set: (value) => mainStore.setAutoShowComments(value)
 })
 
 const cardSize = computed({
@@ -410,9 +372,4 @@ h2 {
   line-height: 1.35;
 }
 
-.api-subtitle {
-  margin: 6px 0 0;
-  font-size: 14px;
-  font-weight: 600;
-}
 </style>

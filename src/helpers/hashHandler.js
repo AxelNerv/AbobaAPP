@@ -18,11 +18,7 @@ export const resolveHashNavigation = (to) => {
   }
 
   // Эти якоря разбирает сама страница — навигацию не трогаем
-  if (
-    to.hash.startsWith('#search=') ||
-    to.hash.startsWith('#imdb=') ||
-    to.hash.startsWith('#shiki')
-  ) {
+  if (to.hash.startsWith('#search=') || to.hash.startsWith('#imdb=')) {
     return true
   }
 

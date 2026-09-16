@@ -23,11 +23,7 @@ export const routes = [
   },
   {
     path: '/shiki/:shiki_id',
-    component: () => import('@/components/MovieInfoShiki.vue'),
-    name: 'movie-info-shiki',
-    meta: {
-      title: 'AbobaTV - Просмотр аниме'
-    }
+    redirect: '/'
   },
   {
     path: '/library',
@@ -38,13 +34,15 @@ export const routes = [
     }
   },
   {
-    path: '/share',
+    path: '/settings',
     component: () => import('@/components/ShareWifi.vue'),
-    name: 'share-wifi',
+    name: 'settings',
     meta: {
-      title: 'AbobaTV - Раздача по Wi-Fi'
+      title: 'AbobaTV - Настройки'
     }
   },
+  // Старый адрес страницы, когда она была только про Wi-Fi.
+  { path: '/share', redirect: '/settings' },
   {
     path: '/contact',
     name: 'ContactsPage',

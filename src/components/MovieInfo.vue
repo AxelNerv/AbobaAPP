@@ -442,7 +442,7 @@
 </template>
 
 <script setup>
-import { getKpInfo, getShikiInfo } from '@/api/movies'
+import { getKpInfo } from '@/api/movies'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { handleApiError } from '@/constants'
 import { addToList } from '@/api/user'
@@ -532,7 +532,6 @@ const kp_id = ref(route.params.kp_id)
 const errorMessage = ref('')
 const errorCode = ref(null)
 const moviePlayerComponent = ref(null)
-const movieRatingComponent = ref(null)
 const initialSeoEntry = getMovieSeoEntry(route.params.kp_id)
 const infoLoading = ref(!initialSeoEntry)
 const movieInfo = ref(
@@ -556,7 +555,7 @@ const clientReady = ref(false)
 const areTrailersActive = computed(() => trailerStore.areTrailersActive)
 const activeTrailerIndex = ref(null)
 const syncCanonicalMovieRoute = async () => {
-  if (kp_id.value.startsWith('shiki') || !movieInfo.value) {
+  if (!movieInfo.value) {
     return
   }
 
@@ -702,12 +701,7 @@ const copyMovieMeta = async () => {
 
 const fetchMovieInfo = async (updateHistory = true) => {
   try {
-    let response
-    if (kp_id.value.startsWith('shiki')) {
-      response = await getShikiInfo(kp_id.value)
-    } else {
-      response = await getKpInfo(kp_id.value, authStore.token)
-    }
+    const response = await getKpInfo(kp_id.value, authStore.token)
 
     if (Array.isArray(response) && response.length === 0) {
       throw new Error('Данные не найдены. Пожалуйста, повторите поиск.')
@@ -715,19 +709,10 @@ const fetchMovieInfo = async (updateHistory = true) => {
 
     movieInfo.value = response
 
-    if (kp_id.value.startsWith('shiki')) {
-      movieInfo.value = {
-        ...movieInfo.value,
-        title: movieInfo.value.name_ru || movieInfo.value.name_en,
-        name_original: movieInfo.value.name_en,
-        short_description: movieInfo.value.slogan
-      }
-    } else {
-      movieInfo.value = {
-        ...movieInfo.value,
-        title: movieInfo.value.name_ru || movieInfo.value.name_en || movieInfo.value.name_original,
-        kinopoisk_id: kp_id.value
-      }
+    movieInfo.value = {
+      ...movieInfo.value,
+      title: movieInfo.value.name_ru || movieInfo.value.name_en || movieInfo.value.name_original,
+      kinopoisk_id: kp_id.value
     }
 
     navbarStore.setHeaderContent({
@@ -750,18 +735,8 @@ const fetchMovieInfo = async (updateHistory = true) => {
     }
 
     // Устанавливаем фон фильма через новый метод
-    if (kp_id.value.startsWith('shiki')) {
-      if (movieInfo.value.screenshots && movieInfo.value.screenshots.length > 0) {
-        const randomIndex = Math.floor(Math.random() * movieInfo.value.screenshots.length)
-        const randomScreenshot = movieInfo.value.screenshots[randomIndex]
-        backgroundStore.updateMoviePoster(randomScreenshot)
-      } else if (movieToSave.poster) {
-        backgroundStore.updateMoviePoster(movieToSave.poster)
-      }
-    } else {
-      if (movieToSave.poster) {
-        backgroundStore.updateMoviePoster(movieToSave.poster)
-      }
+    if (movieToSave.poster) {
+      backgroundStore.updateMoviePoster(movieToSave.poster)
     }
 
     const isHistoryAllowed = computed(() => mainStore.isHistoryAllowed)
@@ -834,7 +809,6 @@ onMounted(async () => {
   // markRaw обязателен: без него Vue делает реактивным весь объект компонента
   // и предупреждает о лишних затратах. Компонент не меняется — следить не за чем.
   moviePlayerComponent.value = markRaw((await import('@/components/PlayerComponent.vue')).default)
-  movieRatingComponent.value = (await import('@/components/MovieRating.vue')).default
   await fetchMovieInfo()
   infoLoading.value = false
   document.addEventListener('keydown', onKeyDown)

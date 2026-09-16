@@ -56,6 +56,9 @@ const init = (app, hooks = {}) => {
     return
   }
   ;({ autoUpdater } = require('electron-updater'))
+  // Адрес выпусков задаём сами: app-update.yml кладёт только сборка
+  // с установщиком, а копия-папка без него падала на первой же проверке.
+  autoUpdater.setFeedURL({ provider: 'github', owner: 'AxelNerv', repo: 'AbobaAPP', releaseType: 'release' })
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowPrerelease = false

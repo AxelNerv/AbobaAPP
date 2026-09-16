@@ -1,12 +1,10 @@
 import { useMainStore } from '@/store/main'
-import * as rhserv from '@/api/movies.rhserv'
 import * as kinobd from '@/api/movies.kinobd'
 import * as kinobox from '@/api/movies.kinobox'
 import * as tmdb from '@/api/movies.tmdb'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 
 const CONTENT_PROVIDERS = {
-  RHSERV: 'rhserv',
   KINOBD: 'kinobd',
   KINOBOX: 'kinobox'
 }
@@ -30,15 +28,6 @@ const getCurrentProvider = () => {
   }
 }
 
-const getCurrentSearchProvider = () => {
-  try {
-    const mainStore = useMainStore()
-    return mainStore.searchApiProvider || CONTENT_PROVIDERS.RHSERV
-  } catch {
-    return CONTENT_PROVIDERS.RHSERV
-  }
-}
-
 const searchKinoBDPlayerCandidates = async (...args) => kinobd.searchPlayerCandidates(...args)
 const getKinoBDPlayerDataByInid = async (...args) => kinobd.getPlayerDataByInid(...args)
 
@@ -49,72 +38,25 @@ const callWithProvider = async (methodName, ...args) => {
     try {
       return await kinobox[methodName](...args)
     } catch (error) {
-      console.warn(`[movies] ${methodName} failed on Kinobox, fallback to KinoBD/RHServ`, error)
-      if (KINOBD_SUPPORTED_METHODS.has(methodName)) {
-        try {
-          return await kinobd[methodName](...args)
-        } catch (fallbackError) {
-          console.warn(`[movies] ${methodName} failed on KinoBD, fallback to RHServ`, fallbackError)
-        }
-      }
-      return await rhserv[methodName](...args)
+      console.warn(`[movies] ${methodName} failed on Kinobox, fallback to KinoBD`, error)
     }
   }
 
-  if (provider === CONTENT_PROVIDERS.KINOBD && KINOBD_SUPPORTED_METHODS.has(methodName)) {
-    try {
-      return await kinobd[methodName](...args)
-    } catch (error) {
-      console.warn(`[movies] ${methodName} failed on KinoBD, fallback to RHServ`, error)
-      return await rhserv[methodName](...args)
-    }
-  }
-
-  // Общий хвост. Если kinobd умеет метод — спрашиваем его первым: rhserv
-  // в бане (403), и поход к нему каждый раз давал ошибку в консоли перед
-  // откатом. Раньше здесь вообще не было fallback, и «Случайный фильм»
-  // падал с 503, хотя kinobd был живой.
   if (KINOBD_SUPPORTED_METHODS.has(methodName)) {
     return await tryInOrder(
       methodName,
-      [
-        { name: 'kinobd', run: () => kinobd[methodName](...args) },
-        { name: 'rhserv', run: () => rhserv[methodName](...args) }
-      ],
+      [{ name: 'kinobd', run: () => kinobd[methodName](...args) }],
       (r) => r !== undefined && r !== null
     )
   }
-  // Метода нет у kinobd — только rhserv, подменить нечем.
-  return await rhserv[methodName](...args)
+
+  throw new Error(`Unsupported movie API method: ${methodName}`)
 }
 
 const apiSearch = async (...args) => {
-  const provider = getCurrentSearchProvider()
-  // Порядок источников: основной зависит от настройки, но второй всегда есть как fallback.
-  // Без него при бане rhserv (403) поиск падал с ложным «недоступно по требованию
-  // правообладателя».
-  const order =
-    provider === CONTENT_PROVIDERS.RHSERV ? [rhserv, kinobd] : [kinobd, rhserv]
-
-  let lastError = null
-  for (const source of order) {
-    try {
-      const data = await source.apiSearch(...args)
-      const normalized = await normalizeMovieListResponse(data)
-      // Пустой результат от первого источника — пробуем второй (вдруг там есть)
-      if (Array.isArray(normalized) && normalized.length === 0 && source !== order[order.length - 1]) {
-        continue
-      }
-      return normalized
-    } catch (error) {
-      lastError = error
-      console.warn('[movies] apiSearch: источник недоступен, пробуем следующий:', error?.message)
-    }
-  }
-  // Оба источника не ответили — пробрасываем ошибку (UI покажет сообщение)
-  throw lastError
+  const data = await kinobd.apiSearch(...args)
+  return await normalizeMovieListResponse(data)
 }
-const getShikiInfo = async (...args) => callWithProvider('getShikiInfo', ...args)
 /**
  * Пробует источники по порядку и возвращает первый годный ответ.
  *
@@ -159,18 +101,13 @@ const tryInOrder = async (label, sources, isGood, { retries = 1, retryDelay = 70
 
 const hasRows = (rows) => Array.isArray(rows) && rows.length > 0
 
-// Порядок источников: kinobd живой, rhserv в бане (403) — поэтому он второй.
-// Оба ходят через наш бэкенд-прокси (/ext/...) с серверным кешем.
 const getKpInfo = async (...args) => {
   const isGoodInfo = (d) =>
     !!(d && (d.kpId || d.kp_id || d.nameRu || d.nameOriginal || d.title))
 
   const data = await tryInOrder(
     'getKpInfo',
-    [
-      { name: 'kinobd', run: () => kinobd.getKpInfo(...args) },
-      { name: 'rhserv', run: () => rhserv.getKpInfo(...args) }
-    ],
+    [{ name: 'kinobd', run: () => kinobd.getKpInfo(...args) }],
     isGoodInfo
   )
 
@@ -178,7 +115,7 @@ const getKpInfo = async (...args) => {
   // поэтому закрывает дыры, которые оставляют остальные источники.
   return await tmdb.enrichMissingFields(data)
 }
-// getPlayers с явным fallback chain: kinobd → kinobox → rhserv
+// getPlayers с явным fallback chain: kinobd → kinobox
 //
 // Порядок важен для скорости. Раньше первым шёл kinobox, но он сейчас не
 // отвечает (закрывает соединение без ответа). Брейкер на бэкенде отключает
@@ -196,12 +133,17 @@ const hasPlayers = (result) =>
   result && typeof result === 'object' && Object.keys(result).length > 0
 
 const getPlayers = async (...args) => {
+  let failedSources = 0
+  let lastError = null
+
   // 1. KinoBD — основной рабочий источник
   try {
     const result = await kinobd.getPlayers(...args)
     if (hasPlayers(result)) return result
     console.warn('[movies] getPlayers: kinobd returned empty, trying kinobox')
   } catch (e) {
+    failedSources += 1
+    lastError = e
     console.warn('[movies] getPlayers: kinobd failed:', e?.message)
   }
 
@@ -209,26 +151,18 @@ const getPlayers = async (...args) => {
   try {
     const result = await kinobox.getPlayers(...args)
     if (hasPlayers(result)) return result
-    console.warn('[movies] getPlayers: kinobox returned empty, trying rhserv')
+    console.warn('[movies] getPlayers: kinobox returned empty')
   } catch (e) {
-    console.warn('[movies] getPlayers: kinobox failed:', e?.message)
-  }
-
-  // 3. RHServ (последний шанс)
-  let lastError = null
-  try {
-    const result = await rhserv.getPlayers(...args)
-    if (hasPlayers(result)) return result
-  } catch (e) {
+    failedSources += 1
     lastError = e
-    console.warn('[movies] getPlayers: rhserv failed:', e?.message)
+    console.warn('[movies] getPlayers: kinobox failed:', e?.message)
   }
 
   // Раньше здесь молча возвращался {} — и когда падали ВСЕ источники, UI
   // показывал «плееров нет», как будто их нет для этого фильма. Отличить
   // «фильма нет ни у кого» от «все источники лежат» было невозможно.
   // Теперь разница явная: пусто — это пусто, а отказ источников — ошибка.
-  if (lastError) {
+  if (failedSources === 2) {
     const err = new Error('Все источники плееров недоступны')
     err.cause = lastError
     err.allSourcesDown = true
@@ -238,10 +172,6 @@ const getPlayers = async (...args) => {
   console.warn('[movies] getPlayers: у источников нет плееров для этого фильма')
   return {}
 }
-const getShikiPlayers = async (...args) => callWithProvider('getShikiPlayers', ...args)
-// Top lists: основной источник rhserv, при сбое (rate-limit/403) — fallback на kinobd.
-// Оба ходят через наш бэкенд-прокси (/ext/...) с серверным кешем, поэтому CORS нет
-// и нагрузка на источники минимальна.
 const getMovies = async (...args) => {
   const typeFilter = args?.[0]?.typeFilter || 'all'
   let rows
@@ -261,8 +191,6 @@ const getMovies = async (...args) => {
   }
   return await normalizeMovieListResponse(rows, { enrichMissingSeo: false })
 }
-const getDons = async (...args) => callWithProvider('getDons', ...args)
-
 // Пагинированный топ для бесконечного скролла главной.
 // Идёт напрямую через kinobd (rhserv пагинацию не поддерживает).
 // Страница 1 не используется — там работает быстрый getMovies с кешем.
@@ -273,45 +201,21 @@ const getMoviesPaginated = async ({ page = 2, typeFilter = 'all' } = {}) => {
   return await normalizeMovieListResponse(rows, { enrichMissingSeo: false })
 }
 const getKpIDfromIMDB = async (...args) => callWithProvider('getKpIDfromIMDB', ...args)
-const getKpIDfromSHIKI = async (...args) => callWithProvider('getKpIDfromSHIKI', ...args)
-const getRating = async (...args) => callWithProvider('getRating', ...args)
-const setRating = async (...args) => callWithProvider('setRating', ...args)
-const getComments = async (...args) => callWithProvider('getComments', ...args)
-const createComment = async (...args) => callWithProvider('createComment', ...args)
-const updateComment = async (...args) => callWithProvider('updateComment', ...args)
-const deleteComment = async (...args) => callWithProvider('deleteComment', ...args)
-const rateComment = async (...args) => callWithProvider('rateComment', ...args)
 const getRandomMovie = async (...args) => callWithProvider('getRandomMovie', ...args)
-const getTwitchStream = async (...args) => callWithProvider('getTwitchStream', ...args)
 
 export {
   searchKinoBDPlayerCandidates,
   getKinoBDPlayerDataByInid,
   apiSearch,
-  getShikiInfo,
   getKpInfo,
   getPlayers,
-  getShikiPlayers,
   getMovies,
   getMoviesPaginated,
-  getDons,
   getKpIDfromIMDB,
-  getKpIDfromSHIKI,
-  getRating,
-  setRating,
-  getComments,
-  createComment,
-  updateComment,
-  deleteComment,
-  rateComment,
-  getRandomMovie,
-  getTwitchStream
+  getRandomMovie
 }
 
 export const toggleErrorSimulation = (enabled) => {
-  if (typeof rhserv.toggleErrorSimulation === 'function') {
-    rhserv.toggleErrorSimulation(enabled)
-  }
   if (typeof kinobd.toggleErrorSimulation === 'function') {
     kinobd.toggleErrorSimulation(enabled)
   }
@@ -319,4 +223,3 @@ export const toggleErrorSimulation = (enabled) => {
     kinobox.toggleErrorSimulation(enabled)
   }
 }
-

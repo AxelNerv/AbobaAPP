@@ -6,9 +6,6 @@
         <button :class="{ active: searchType === 'kinopoisk' }" @click="setSearchType('kinopoisk')">
           ID Кинопоиск
         </button>
-        <button :class="{ active: searchType === 'shikimori' }" @click="setSearchType('shikimori')">
-          ID Shikimori
-        </button>
         <button :class="{ active: searchType === 'imdb' }" @click="setSearchType('imdb')">
           ID IMDB
         </button>
@@ -114,7 +111,6 @@
 import {
   apiSearch,
   getKpIDfromIMDB,
-  getKpIDfromSHIKI,
   getMovies,
   getRandomMovie,
   getKpInfo
@@ -362,7 +358,6 @@ const getPlaceholder = () => {
     {
       title: 'Введите название фильма',
       kinopoisk: 'Пример: 301 (Матрица)',
-      shikimori: 'Пример: 28171 (Повар-боец Сома)',
       imdb: 'Пример: 0198781 (Корпорация монстров)'
     }[searchType.value] || 'Введите название фильма'
   )
@@ -415,24 +410,6 @@ const performSearch = async () => {
       return
     }
 
-    if (searchType.value === 'shikimori') {
-      if (!/^\d+$/.test(searchTerm.value)) {
-        searchTerm.value = searchTerm.value.replace(/\D/g, '')
-      }
-
-      try {
-        const response = await getKpIDfromSHIKI(searchTerm.value)
-        if (response.id_kp) {
-          router.push(getMovieSeoPath({ kp_id: `${response.id_kp}` }))
-          return
-        }
-      } catch (e) {
-        console.log('Switch to kodik', e)
-      }
-
-      router.push({ name: 'movie-info-shiki', params: { shiki_id: `shiki${searchTerm.value}` } })
-      return
-    }
     if (searchType.value === 'title') {
       const response = await apiSearch(searchTerm.value)
       movies.value = response.map((movie) => ({
@@ -474,11 +451,6 @@ onMounted(async () => {
     const imdbId = decodeURIComponent(hash.replace('#imdb=', ''))
     setSearchType('imdb')
     searchTerm.value = imdbId
-    performSearch()
-  } else if (hash.startsWith('#shiki')) {
-    const shikiId = decodeURIComponent(hash.replace('#shiki', ''))
-    setSearchType('shikimori')
-    searchTerm.value = shikiId
     performSearch()
   }
   searchInput.value?.focus()

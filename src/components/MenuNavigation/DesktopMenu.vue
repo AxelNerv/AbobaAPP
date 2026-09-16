@@ -72,6 +72,14 @@
       </div>
     </nav>
 
+    <!-- Настройки — внизу панели. Только в приложении: на сайте настраивать нечего. -->
+    <div v-if="isDesktopApp" class="sidebar-bottom">
+      <router-link to="/settings" class="nav-item" title="Настройки" @click="closeSidebar">
+        <span class="nav-icon"><AppIcon name="settings" :size="17" /></span>
+        <span class="nav-label">Настройки</span>
+      </router-link>
+    </div>
+
     <!-- Tooltip в свёрнутом виде -->
     <div v-if="!isSidebarOpen && activeTooltip !== null" class="tooltip" :style="tooltipStyle">
       {{ tooltipText }}
@@ -92,6 +100,7 @@ const route = useRoute()
 const navbarStore = useNavbarStore()
 
 const isSidebarOpen = ref(false)
+const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
 const sidebar = ref(null)
 
 const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value }
@@ -174,6 +183,13 @@ onBeforeUnmount(() => {
 .sidebar-nav {
   display: flex; flex-direction: column;
   gap: 2px; width: 100%; padding: 0 8px; flex: 1;
+}
+
+.sidebar-bottom {
+  width: 100%;
+  padding: 8px 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
 }
 
 .sidebar-divider {

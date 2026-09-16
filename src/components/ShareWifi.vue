@@ -1,10 +1,7 @@
 <template>
   <div class="share-page">
-    <h1 class="share-title">Приложение и Wi-Fi</h1>
-    <p class="share-lead">
-      Пока приложение работает, сайт можно открыть с телефона в той же сети.
-      Для доступа к своей истории войдите на телефоне в тот же Telegram-профиль.
-    </p>
+    <h1 class="share-title">Настройки</h1>
+    <p class="share-lead">Вход, обновления, данные и раздача на телефон.</p>
 
     <div v-if="!isApp" class="share-card share-card--muted">
       <AppIcon name="info" :size="20" />
@@ -49,6 +46,11 @@
       </div>
       <p v-if="error" class="share-error" role="alert">{{ error }}</p>
       <p v-if="message" class="share-hint" role="status">{{ message }}</p>
+      <h2 class="share-section">Раздача на телефон по Wi-Fi</h2>
+      <p class="share-lead">
+        Пока приложение работает, сайт можно открыть с телефона в той же сети.
+        Для доступа к своей истории войдите на телефоне в тот же Telegram-профиль.
+      </p>
       <div class="share-card">
         <div class="share-row">
           <div>
@@ -256,6 +258,13 @@ onMounted(async () => {
   max-width: 720px;
   margin: 0 auto;
   padding: 40px 24px 60px;
+}
+
+.share-section {
+  margin: 28px 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
 }
 
 .share-title {

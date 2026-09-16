@@ -18,12 +18,6 @@
           ID Кинопоиск
         </button>
         <button
-          :class="{ active: searchType === 'shikimori' }"
-          @click="setSearchType('shikimori')"
-        >
-          ID Shikimori
-        </button>
-        <button
           :class="{ active: searchType === 'imdb' }"
           @click="setSearchType('imdb')"
         >
@@ -70,7 +64,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useRouter } from 'vue-router'
 import { useNavbarStore } from '@/store/navbar'
-import { getKpIDfromIMDB, getKpIDfromSHIKI } from '@/api/movies'
+import { getKpIDfromIMDB } from '@/api/movies'
 import { getMovieSeoPath } from '@/utils/movieSeo'
 
 const navbarStore = useNavbarStore()
@@ -92,7 +86,6 @@ const setSearchType = (type) => {
 
 const getPlaceholder = () => ({
   kinopoisk: 'Введите ID Кинопоиска (например: 326)',
-  shikimori: 'Введите ID Shikimori',
   imdb: 'Введите ID IMDB (например: tt0111161)'
 })[searchType.value] || 'Введите ID'
 
@@ -112,14 +105,6 @@ const search = async () => {
         router.push(getMovieSeoPath({ kp_id: `${response.id_kp}` }))
       } else {
         errorMessage.value = 'Не удалось найти фильм по IMDB ID'
-      }
-    } else if (searchType.value === 'shikimori') {
-      const response = await getKpIDfromSHIKI(searchTerm.value)
-      if (response?.id_kp) {
-        closeModal()
-        router.push(getMovieSeoPath({ kp_id: `${response.id_kp}` }))
-      } else {
-        errorMessage.value = 'Не удалось найти фильм по Shikimori ID'
       }
     }
   } catch {

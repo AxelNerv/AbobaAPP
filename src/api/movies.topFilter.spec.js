@@ -11,7 +11,6 @@ vi.mock('axios', () => ({
     create: () => ({ get: (...args) => axiosGet(...args), interceptors: { request: { use() {} } } })
   }
 }))
-vi.mock('@/api/movies.rhserv', () => ({}))
 
 const TOP = [
   { kinopoisk_id: 1, name_russian: 'Фильм 1', type: 'film' },
@@ -54,7 +53,6 @@ describe('подмена заготовленным каталогом', () => {
     vi.doMock('@/store/main', () => ({ useMainStore: () => { throw new Error('no pinia') } }))
     vi.doMock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async (rows) => rows }))
     vi.doMock('@/api/movies.kinobox', () => ({}))
-    vi.doMock('@/api/movies.rhserv', () => ({}))
     vi.doMock('@/api/movies.kinobd', () => ({ getMovies: (...a) => kinobdGetMovies(...a) }))
     vi.doMock('@/data/movies.json', () => ({ default: [{ kp_id: 'заготовка' }] }))
   })

@@ -1,5 +1,4 @@
 import axios from 'axios'
-import * as rhserv from '@/api/movies.rhserv'
 import { resolvePosterByMovie, resolvePosterSetByMovie } from '@/utils/mediaUtils'
 import { pinPlayerHost } from '@/utils/playerHost'
 
@@ -535,10 +534,6 @@ const getPlayers = async (kpId, options = {}) => {
   return buildPlayersMap(candidates.map((c) => c.raw_data))
 }
 
-const getShikiInfo = async (...args) => rhserv.getShikiInfo(...args)
-
-const getShikiPlayers = async (...args) => rhserv.getShikiPlayers(...args)
-
 const getMovies = async ({ activeTime = 'all', typeFilter = 'all', limit = null, page = 1 } = {}) => {
   let endpoint = '/api/films/top'
   if (activeTime === 'updates') endpoint = '/api/films/updates'
@@ -750,46 +745,23 @@ const getRandomMovie = async (opts = {}) => {
     }
   }
 
-  // Совсем ничего не подошло под фильтр (или все запросы упали) → fallback на rhserv
+  // Совсем ничего не подошло под фильтр (или все запросы упали).
   if (!lastFallback) {
     throw new Error('kinobd: no usable response after retries')
   }
   return lastFallback
 }
 
-const getDons = async (...args) => rhserv.getDons(...args)
-const getKpIDfromSHIKI = async (...args) => rhserv.getKpIDfromSHIKI(...args)
-const getRating = async (...args) => rhserv.getRating(...args)
-const setRating = async (...args) => rhserv.setRating(...args)
-const getComments = async (...args) => rhserv.getComments(...args)
-const createComment = async (...args) => rhserv.createComment(...args)
-const updateComment = async (...args) => rhserv.updateComment(...args)
-const deleteComment = async (...args) => rhserv.deleteComment(...args)
-const rateComment = async (...args) => rhserv.rateComment(...args)
-const getTwitchStream = async (...args) => rhserv.getTwitchStream(...args)
-
 export {
   searchPlayerCandidates,
   getPlayerDataByInid,
   apiSearch,
   getMovieSeoByKpId,
-  getShikiInfo,
   getKpInfo,
   getPlayers,
-  getShikiPlayers,
   getMovies,
-  getDons,
   getKpIDfromIMDB,
-  getKpIDfromSHIKI,
-  getRating,
-  setRating,
-  getComments,
-  createComment,
-  updateComment,
-  deleteComment,
-  rateComment,
-  getRandomMovie,
-  getTwitchStream
+  getRandomMovie
 }
 
 export const toggleErrorSimulation = (enabled) => {
