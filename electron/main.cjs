@@ -277,6 +277,7 @@ ${err.message}`)
     tray.on('double-click', showMainWindow)
   } catch (err) { console.warn('Трей недоступен:', err.message) }
 
+  app.on('browser-window-focus', () => updater.checkIfStale())
   updater.init(app, {
     onStatus: (state) => mainWindow?.webContents.send('app:update-status', state),
     // Установщику нужны свободные файлы: трей не должен перехватить закрытие,

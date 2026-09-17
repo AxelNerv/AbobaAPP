@@ -1,5 +1,5 @@
 <template>
-  <aside ref="sidebar" class="sidebar" :class="{ expanded: isSidebarOpen }">
+  <aside ref="sidebar" class="sidebar" :class="{ expanded: isSidebarOpen }" @keydown="onSidebarKeyDown">
     <!-- Логотип -->
     <div class="sidebar-logo" @click="toggleSidebar">
       <span class="logo-ab">Ab</span>
@@ -65,7 +65,10 @@
         v-if="route.name !== 'home'"
         class="nav-item"
         title="Поиск (Ctrl+F)"
+        tabindex="0"
+        role="button"
         @click="toggleSearch"
+        @keydown.enter.prevent="toggleSearch"
       >
         <span class="nav-icon"><AppIcon name="search" :size="17" /></span>
         <span class="nav-label">Поиск</span>
@@ -117,6 +120,33 @@ const tooltipStyle = computed(() => ({
   top: `${tooltipPosition.value.y}px`
 }))
 
+// ── Пульт телевизора и стрелки ──
+// Вверх/вниз — по пунктам панели, вправо — обратно к содержимому, туда,
+// где фокус был до панели (обычно карточка фильма).
+let lastContentFocus = null
+const rememberContentFocus = (event) => {
+  if (event.target?.closest?.('#main-content')) lastContentFocus = event.target
+}
+
+const onSidebarKeyDown = (event) => {
+  const items = [...(sidebar.value?.querySelectorAll('.nav-item') || [])]
+  const index = items.indexOf(document.activeElement)
+  if (index === -1) return
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    event.stopPropagation()
+    const next = items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]
+    next.focus()
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    event.stopPropagation()
+    const target =
+      (lastContentFocus?.isConnected && lastContentFocus) ||
+      document.querySelector('#main-content .movie-card, #main-content input, #main-content button, #main-content a')
+    target?.focus()
+  }
+}
+
 const toggleSearch = () => {
   closeSidebar()
   navbarStore.openSearchModal()
@@ -124,9 +154,11 @@ const toggleSearch = () => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('focusin', rememberContentFocus)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('focusin', rememberContentFocus)
   if (clickOutsideTimeout) window.cancelAnimationFrame(clickOutsideTimeout)
   if (tooltipTimeout) clearTimeout(tooltipTimeout)
 })
@@ -152,7 +184,8 @@ onBeforeUnmount(() => {
   .sidebar { display: none !important; }
 }
 .sidebar.expanded,
-.sidebar:hover {
+.sidebar:hover,
+.sidebar:focus-within {
   width: 210px;
 }
 
@@ -232,7 +265,16 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .sidebar.expanded .nav-label,
-.sidebar:hover .nav-label { opacity: 1; }
+.sidebar:hover .nav-label,
+.sidebar:focus-within .nav-label { opacity: 1; }
+
+/* С пульта нужно видеть, какой пункт выбран */
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--accent-color);
+}
 
 .icon-user {
   height: 22px; width: 22px;

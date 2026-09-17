@@ -5,6 +5,7 @@ export const useNavbarStore = defineStore('navbar', {
     isNavbarVisible: false,
     isModalSearchVisible: false,
     isModalIdSearchVisible: false,
+    isSettingsModalVisible: false,
     headerContent: null
   }),
   actions: {
@@ -33,6 +34,13 @@ export const useNavbarStore = defineStore('navbar', {
     },
     closeIdSearchModal() {
       this.isModalIdSearchVisible = false
+    },
+    openSettingsModal() {
+      this.isSettingsModalVisible = true
+      this.isNavbarVisible = false
+    },
+    closeSettingsModal() {
+      this.isSettingsModalVisible = false
     },
     setHeaderContent(content) {
       this.headerContent = content

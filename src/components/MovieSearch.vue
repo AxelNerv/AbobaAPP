@@ -94,7 +94,6 @@
         </div>
       </div>
     </div>
-    <FooterDonaters />
 
     <RandomMovieModal
       :is-open="showRandomModal"
@@ -118,7 +117,6 @@ import {
 import { handleApiError } from '@/constants'
 import { getMyLists } from '@/api/user'
 import ErrorMessage from '@/components/ErrorMessage.vue'
-import FooterDonaters from '@/components/FooterDonaters.vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { MovieList } from '@/components/MovieList/'
 import { useMainStore } from '@/store/main'

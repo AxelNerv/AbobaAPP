@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-page">
+  <div class="settings-page" :class="{ 'settings-page--embedded': embedded }">
     <header class="settings-head">
       <div>
         <h1 class="settings-title">Настройки</h1>
@@ -196,6 +196,9 @@ import AppIcon from '@/components/icons/AppIcon.vue'
 import { getSyncStatus, importLibrary } from '@/api/user'
 import { useAuthStore } from '@/store/auth'
 import { checkForUpdates, hasPendingUpdate, installUpdate, startUpdateWatch, updateActionLabel, updateState } from '@/utils/appUpdates'
+
+// embedded — страница открыта во всплывающем окне, а не отдельным адресом.
+defineProps({ embedded: { type: Boolean, default: false } })
 
 const isApp = computed(() => typeof window !== 'undefined' && !!window.electronAPI)
 const authStore = useAuthStore()
@@ -734,6 +737,10 @@ onMounted(async () => {
   background: rgba(255, 82, 82, 0.08);
   border-color: rgba(255, 82, 82, 0.28);
 }
+
+/* Во всплывающем окне отступы даёт само окно, а значки в углу оно перекрывает */
+.settings-page--embedded { padding: 0; max-width: none; }
+.settings-page--embedded .settings-head { padding-right: 48px; }
 
 @media (max-width: 900px) {
   .settings-page { padding: 24px 16px 48px; }

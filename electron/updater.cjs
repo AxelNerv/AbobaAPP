@@ -17,13 +17,17 @@ const path = require('path')
 
 const RELEASES_URL = 'https://github.com/AxelNerv/AbobaAPP/releases/latest'
 const FIRST_CHECK_DELAY_MS = 15 * 1000
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+const CHECK_INTERVAL_MS = 2 * 60 * 60 * 1000
+// Приложение часами висит открытым: новая версия могла выйти, пока ждём
+// планового срока. Вернулся к окну, а последняя проверка давно — проверяем сразу.
+const FOCUS_RECHECK_MS = 30 * 60 * 1000
 
 let autoUpdater = null
 let state = { state: 'idle', version: null, notes: '', percent: 0, error: '', installable: false, releasesUrl: RELEASES_URL }
 let notify = () => {}
 let beforeInstall = () => {}
 let timer = null
+let lastCheckAt = 0
 
 const set = (patch) => {
   state = { ...state, ...patch }
@@ -84,6 +88,7 @@ const init = (app, hooks = {}) => {
 
 const check = async () => {
   if (!autoUpdater || ['checking', 'downloading', 'downloaded'].includes(state.state)) return state
+  lastCheckAt = Date.now()
   try {
     await autoUpdater.checkForUpdates()
   } catch (err) {
@@ -114,6 +119,11 @@ const install = async () => {
   return { ok: true }
 }
 
+/** Проверка при возврате к окну — не чаще раза в FOCUS_RECHECK_MS. */
+const checkIfStale = () => {
+  if (autoUpdater && Date.now() - lastCheckAt > FOCUS_RECHECK_MS) check()
+}
+
 const status = () => state
 
-module.exports = { init, check, install, status, RELEASES_URL }
+module.exports = { init, check, checkIfStale, install, status, RELEASES_URL }

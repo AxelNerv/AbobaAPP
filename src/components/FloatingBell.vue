@@ -1,7 +1,8 @@
 <template>
   <div v-if="authStore.token || isDesktopApp" class="floating-bell-wrapper">
+    <!-- Без входа колокольчик прячем, но об обновлении сообщить нужно всё равно -->
     <button
-      v-if="authStore.token"
+      v-if="authStore.token || hasPendingUpdate()"
       class="bell-btn"
       :class="{ 'has-unread': hasUnread }"
       :title="hasUnread ? `Уведомлений: ${notifications.length}` : 'Уведомления'"
@@ -56,9 +57,15 @@
 
     <!-- Настройки приложения: такой же кружок слева от колокольчика
          (row-reverse: в разметке после колокольчика, на экране — левее) -->
-    <router-link v-if="isDesktopApp" to="/settings" class="bell-btn settings-btn" title="Настройки">
+    <button
+      v-if="isDesktopApp"
+      class="bell-btn settings-btn"
+      :class="{ active: navbarStore.isSettingsModalVisible }"
+      title="Настройки"
+      @click.stop="openSettings"
+    >
       <AppIcon name="settings" :size="19" />
-    </router-link>
+    </button>
   </div>
 </template>
 
@@ -66,6 +73,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useAuthStore } from '@/store/auth'
+import { useNavbarStore } from '@/store/navbar'
 import {
   hasPendingUpdate,
   installUpdate,
@@ -76,6 +84,12 @@ import {
 } from '@/utils/appUpdates'
 
 const authStore = useAuthStore()
+const navbarStore = useNavbarStore()
+// Окно поверх страницы: переход на /settings закрывал фильм вместе с плеером.
+const openSettings = () => {
+  isOpen.value = false
+  navbarStore.openSettingsModal()
+}
 const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
 
 const isOpen = ref(false)
@@ -249,8 +263,8 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 8px;
 }
-.settings-btn { text-decoration: none; box-sizing: border-box; }
-.settings-btn.router-link-active {
+.settings-btn { box-sizing: border-box; }
+.settings-btn.active {
   color: var(--accent-color);
   border-color: rgba(0, 229, 255, 0.55);
   background: rgba(0, 229, 255, 0.1);

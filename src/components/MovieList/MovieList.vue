@@ -149,9 +149,21 @@ const handleKeyDown = (event) => {
     case 'ArrowRight':
       activeMovieIndex.value = (currentIndex + 1) % moviesList.length
       break
-    case 'ArrowLeft':
-      activeMovieIndex.value = (currentIndex - 1 + moviesList.length) % moviesList.length
+    case 'ArrowLeft': {
+      // С крайней левой карточки ряда — в боковую панель. Раньше фокус
+      // перескакивал в конец предыдущего ряда, и с пульта телевизора
+      // до панели было не добраться: список просто листался.
+      const sidebarItem =
+        document.querySelector('.sidebar .nav-item.router-link-active') ||
+        document.querySelector('.sidebar .nav-item')
+      if (currentIndex % columns === 0 && sidebarItem && sidebarItem.offsetParent !== null) {
+        event.preventDefault()
+        sidebarItem.focus()
+        break
+      }
+      activeMovieIndex.value = Math.max(currentIndex - 1, 0)
       break
+    }
     case 'ArrowUp':
       event.preventDefault()
       if (currentIndex <= 0) {

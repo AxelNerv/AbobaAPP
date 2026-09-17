@@ -11,6 +11,10 @@
       <IdSearchModal v-if="navbarStore.isModalIdSearchVisible" />
     </transition>
 
+    <transition name="fade">
+      <SettingsModal v-if="navbarStore.isSettingsModalVisible" />
+    </transition>
+
     <!-- Модалка случайного фильма -->
     <RandomMovieModal
       :is-open="showRandomModal"
@@ -32,6 +36,7 @@ import DesktopMenu from './MenuNavigation/DesktopMenu.vue'
 import MobileMenu from './MenuNavigation/MobileMenu.vue'
 import ModalSearch from './ModalSearch.vue'
 import IdSearchModal from './IdSearchModal.vue'
+import SettingsModal from './SettingsModal.vue'
 import RandomMovieModal from './RandomMovieModal.vue'
 import { getRandomMovie } from '@/api/movies'
 import { handleApiError } from '@/constants'
