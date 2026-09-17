@@ -933,6 +933,9 @@ const onIframeError = () => {
 // синхронизируется на другие компьютеры. При открытии — кладёт обратно.
 const PROGRESS_SAVE_MS = 15000
 const progressSupported = isDesktopApp && !!window.electronAPI?.player
+// Показать, где остановился, можно в любом браузере (телефон по Wi-Fi):
+// позиция уже лежит в базе. А вот забрать её из плеера и вернуть обратно
+// умеет только приложение — браузер не пускает в окно чужого сайта.
 const savedProgress = ref(null)
 const progressLabel = computed(() => formatProgress(savedProgress.value?.summary))
 let progressTimer = null
@@ -951,13 +954,14 @@ const loadSavedProgress = async () => {
   progressKpId = String(props.kpId || kp_id.value || '')
   savedProgress.value = null
   lastProgressSnapshot = ''
-  if (!progressSupported || !progressKpId || !hasAuthToken()) return
+  if (!progressKpId || !hasAuthToken()) return
   try {
     const { payload } = await getWatchProgress(progressKpId)
     if (payload && typeof payload === 'object' && payload.players) savedProgress.value = payload
   } catch {
     // Нет сохранённой позиции или бэкенд занят — смотреть это не мешает.
   }
+  if (!progressSupported) return
   // Плеер читает позицию в первые же мгновения загрузки, поэтому готовим её
   // для всех плееров сразу, ещё до того, как выбран какой-то из них.
   const players = savedProgress.value?.players || {}
@@ -1211,6 +1215,25 @@ onBeforeUnmount(() => {
   font-weight: 500;
   transition: all 0.18s;
   flex-shrink: 0;
+}
+
+/* Телефон: «Плеер: TURBO изменить › | Источник» не помещался и уезжал за экран */
+@media (max-width: 600px) {
+  .players-list {
+    padding: 0 12px;
+    box-sizing: border-box;
+  }
+  .players-list > span {
+    display: none;
+  }
+  .player-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+  }
+  .player-btn::after {
+    display: none;
+  }
 }
 
 .source-btn:hover {

@@ -79,7 +79,10 @@ const handleAction = (link) => {
   left: 0;
   width: 250px;
   height: 100vh;
-  background: rgba(30, 30, 30, 0.97);
+  /* Те же цвета, что у боковой панели на компьютере (DesktopMenu) */
+  background: linear-gradient(180deg, #090e1c 0%, #07090f 100%);
+  border-right: 1px solid rgba(0, 229, 255, 0.07);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
   padding-top: 60px;
   z-index: 5;
 }
@@ -110,7 +113,7 @@ const handleAction = (link) => {
   display: flex;
   align-items: center;
   gap: 1rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(232, 234, 240, 0.6);
   text-decoration: none;
   padding: 10px 20px;
   transition: all 0.3s ease;
@@ -149,19 +152,14 @@ const handleAction = (link) => {
 }
 
 .nav-links a:hover {
-  background: var(--accent-transparent, rgba(108, 92, 231, 0.15));
-  color: var(--accent-color, #6c5ce7);
-  border-left: 3px solid var(--accent-color, #6c5ce7);
-  transform: translateX(3px);
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--accent-color);
 }
 
 .nav-links a:active,
 .nav-links a.router-link-active {
-  background: rgba(0, 229, 255, 0.12);
-  color: var(--accent-color, #9d4edd);
-  border-left: 3px solid var(--accent-color, #9d4edd);
-  box-shadow: inset 0 0 16px rgba(0, 229, 255, 0.15);
-  text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--accent-color);
 }
 
 
