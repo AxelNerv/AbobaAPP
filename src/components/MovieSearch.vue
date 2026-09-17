@@ -462,13 +462,11 @@ watch(searchTerm, () => {
   debouncedPerformSearch()
 })
 
+// Вниз из строки поиска — к первой карточке. Проверяли только результаты
+// поиска, а на главной показан список популярного, и с пульта из поля было
+// не выйти.
 const focusFirstMovieCard = () => {
-  if (movies.value.length > 0) {
-    const firstMovieCard = document.querySelector('.movie-card')
-    if (firstMovieCard) {
-      firstMovieCard.focus()
-    }
-  }
+  document.querySelector('#main-content .movie-card')?.focus()
 }
 
 const openRandomMovie = () => {

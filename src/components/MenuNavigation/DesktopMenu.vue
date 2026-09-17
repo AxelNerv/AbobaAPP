@@ -10,22 +10,8 @@
         <!-- Разделитель перед первым action-пунктом -->
         <div v-if="link.action && !props.links[idx - 1]?.action" class="sidebar-divider"></div>
 
-        <!-- NotificationBadge -->
-        <template v-if="link.component === 'NotificationBadge'">
-          <router-link
-            :to="link.to"
-            :exact="link.exact"
-            class="nav-item notification-link"
-            :title="link.text"
-            @click="closeSidebar"
-          >
-            <span class="nav-icon"><NotificationBadge /></span>
-            <span class="nav-label">{{ link.text }}</span>
-          </router-link>
-        </template>
-
         <!-- Action (без роута) -->
-        <template v-else-if="link.action">
+        <template v-if="link.action">
           <button
             type="button"
             class="nav-item action-btn"
@@ -87,7 +73,6 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useRoute } from 'vue-router'
 import { useNavbarStore } from '@/store/navbar'
-import NotificationBadge from '@/components/notification/NotificationBadge.vue'
 
 const props = defineProps({ links: Array })
 
@@ -207,6 +192,9 @@ onBeforeUnmount(() => {
 .sidebar-nav {
   display: flex; flex-direction: column;
   gap: 2px; width: 100%; padding: 0 8px; flex: 1;
+  /* Отступы внутри ширины: иначе меню и пункты шире панели,
+     и подсветка выбранного пункта срезается её краем */
+  box-sizing: border-box;
 }
 
 .sidebar-divider {
@@ -218,8 +206,8 @@ onBeforeUnmount(() => {
 }
 
 .nav-item,
-.action-btn,
-.notification-link {
+.action-btn {
+  box-sizing: border-box;
   display: flex; align-items: center;
   gap: 13px;
   padding: 10px 8px;
@@ -268,10 +256,11 @@ onBeforeUnmount(() => {
 .sidebar:hover .nav-label,
 .sidebar:focus-within .nav-label { opacity: 1; }
 
-/* С пульта нужно видеть, какой пункт выбран */
-.nav-item:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: -2px;
+/* С пульта нужно видеть, какой пункт выбран. Рамка — внутренней тенью:
+   обычный outline выходит за пункт, а панель обрезает всё за своим краем. */
+.sidebar .nav-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent-color);
   background: rgba(0, 229, 255, 0.1);
   color: var(--accent-color);
 }

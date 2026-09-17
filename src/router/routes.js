@@ -59,31 +59,11 @@ export const routes = [
       title: 'AbobaTV - Поиск по ID'
     }
   },
-  {
-    path: '/history',
-    name: 'history',
-    component: () => import('@/components/HistoryPage.vue'),
-    meta: {
-      title: 'AbobaTV - История просмотра'
-    }
-  },
-  {
-    path: '/favorites',
-    name: 'favorites',
-    component: () => import('@/components/FavoritesPage.vue'),
-    meta: {
-      title: 'AbobaTV - Избранное'
-    }
-  },
-  {
-    path: '/notifications',
-    name: 'notifications',
-    component: () => import('@/components/NotificationsPage.vue'),
-    meta: {
-      title: 'AbobaTV - Уведомления',
-      requiresAuth: true
-    }
-  },
+  // Старые страницы сайта: история и избранное живут в библиотеке,
+  // уведомления — в колокольчике.
+  { path: '/history', redirect: '/library' },
+  { path: '/favorites', redirect: '/library' },
+  { path: '/notifications', redirect: '/' },
   {
     path: '/:pathMatch(.*)*',
     component: () => import('@/components/NotFound.vue'),

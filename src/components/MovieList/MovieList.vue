@@ -129,7 +129,9 @@ const removeFromHistory = async (kp_id) => {
 }
 
 const handleKeyDown = (event) => {
-  if (!moviesList?.length) return
+  // Стрелку уже обработали (например, «вниз» из строки поиска перевело фокус
+  // на первую карточку) — второй раз сдвигать нельзя, иначе проскакиваем ряд.
+  if (event.defaultPrevented || !moviesList?.length) return
 
   const focusedCard =
     event.target?.classList?.contains('movie-card') ? event.target : document.activeElement

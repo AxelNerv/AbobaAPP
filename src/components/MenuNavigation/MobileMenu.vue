@@ -4,21 +4,9 @@
       <div class="nav-links-wrapper">
         <ul class="nav-links">
           <li v-for="link in props.links" :key="link.text">
-            <template v-if="link.component === 'NotificationBadge'">
-              <router-link
-                :to="link.to"
-                :exact="link.exact"
-                class="notification-link"
-                @click="closeNavbar"
-              >
-                <NotificationBadge />
-                <span class="menu-text">{{ link.text }}</span>
-              </router-link>
-            </template>
-
             <!-- Кнопка с action (случайный фильм, поиск по ID и т.д.) -->
             <button
-              v-else-if="link.action"
+              v-if="link.action"
               class="action-link"
               @click="handleAction(link)"
             >
@@ -67,7 +55,6 @@
 import { storeToRefs } from 'pinia'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useNavbarStore } from '@/store/navbar'
-import NotificationBadge from '@/components/notification/NotificationBadge.vue'
 
 const props = defineProps({
   links: Array
@@ -177,31 +164,6 @@ const handleAction = (link) => {
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
 }
 
-.notification-link {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-  padding: 10px 20px;
-  transition: all 0.3s ease;
-  min-width: 250px;
-}
-
-.notification-link:hover {
-  background: rgba(0, 229, 255, 0.1);
-  color: var(--accent-color, #9d4edd);
-  border-left: 3px solid var(--accent-color, #9d4edd);
-  transform: translateX(3px);
-}
-
-.notification-link:active,
-.notification-link.router-link-active {
-  background: rgba(0, 229, 255, 0.12);
-  color: var(--accent-color, #9d4edd);
-  border-left: 3px solid var(--accent-color, #9d4edd);
-  box-shadow: inset 0 0 16px rgba(0, 229, 255, 0.15);
-}
 
 .slide-enter-active,
 .slide-leave-active {

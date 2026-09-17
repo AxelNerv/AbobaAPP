@@ -31,6 +31,7 @@ const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
 if (isDesktopApp) document.documentElement.classList.add('is-desktop-app')
 
 import BackgroundSpace from '@/components/BackgroundSpace.vue'
+import { installSpatialNavigation } from '@/composables/useSpatialNavigation'
 import MenuNavigation from '@/components/MenuNavigation.vue'
 import MobileHeader from '@/components/MobileHeader.vue'
 import Notification from '@/components/notification/ToastMessage.vue'
@@ -82,6 +83,8 @@ const handleKeyDown = (event) => {
 }
 
 onMounted(() => {
+  // Стрелки (пульт телевизора) переводят фокус на соседний элемент на любой странице
+  appSubscriptions.push(installSpatialNavigation())
   store.setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
   window.addEventListener('resize', updateIsMobile)
   document.addEventListener('keydown', handleKeyDown, true)

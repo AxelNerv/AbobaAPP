@@ -7,28 +7,16 @@
         :class="{ animate: animate }"
       />
     </button>
-    <div v-if="unreadCount > 0" class="mobile-badge">
-      {{ displayCount }}
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useNavbarStore } from '@/store/navbar'
-import { useNotificationsStore } from '@/store/notifications'
 
 const navbarStore = useNavbarStore()
-const notificationsStore = useNotificationsStore()
 const animate = ref(false)
-
-const unreadCount = computed(() => notificationsStore.unreadCount)
-
-const displayCount = computed(() => {
-  if (unreadCount.value > 99) return '99+'
-  return unreadCount.value
-})
 
 function toggle() {
   // Запускаем анимацию перед переключением иконки
@@ -64,24 +52,6 @@ function toggle() {
   color: #fff;
 }
 
-.mobile-badge {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  background: var(--accent-color);
-  color: white;
-  font-size: 8px;
-  font-weight: 600;
-  padding: 2px;
-  border-radius: 50%;
-  min-width: 12px;
-  height: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  animation: bounce-in 0.5s ease;
-}
 
 /* Базовая анимация для иконки */
 .toggle i {
