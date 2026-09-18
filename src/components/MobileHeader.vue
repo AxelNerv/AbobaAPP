@@ -6,7 +6,7 @@
       <!-- Если есть изображение, показываем его -->
       <img
         v-if="navbarStore.headerContent && navbarStore.headerContent.imageUrl"
-        :src="navbarStore.headerContent.imageUrl"
+        :src="deviceImage(navbarStore.headerContent.imageUrl)"
         alt="Логотип"
       />
 
@@ -30,6 +30,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import ToggleMenu from '@/components/buttons/ToggleMenu.vue'
 import { useNavbarStore } from '@/store/navbar'
+import { deviceImage } from '@/utils/mediaUtils'
 
 const navbarStore = useNavbarStore()
 

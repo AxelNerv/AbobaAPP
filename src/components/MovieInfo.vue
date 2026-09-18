@@ -59,7 +59,7 @@
             @mouseleave="titleCopyTooltip = false"
             @click="copyMovieMeta"
           >
-            <img :src="movieInfo.logo_url" alt="Логотип фильма" class="content-logo" />
+            <img :src="deviceImage(movieInfo.logo_url)" alt="Логотип фильма" class="content-logo" />
           </div>
           <div
             v-else
@@ -282,7 +282,7 @@
           <div class="info-content">
             <div v-if="movieInfo.poster_url" class="movie-poster-container desktop-only">
               <a :href="movieInfo.poster_url" target="_blank" rel="noopener noreferrer">
-                <img :src="movieInfo.poster_url" alt="Постер фильма" class="movie-poster" />
+                <img :src="deviceImage(movieInfo.poster_url)" alt="Постер фильма" class="movie-poster" />
               </a>
             </div>
             <div class="details-container">
@@ -350,7 +350,7 @@
                     class="staff-link"
                     :title="person.description || ''"
                   >
-                    <img :src="person.poster_url" :alt="person.name_ru" class="staff-photo" />
+                    <img :src="deviceImage(person.poster_url)" :alt="person.name_ru" class="staff-photo" />
                     <span class="staff-name">{{ person.name_ru || person.name_en }}</span>
                     <span v-if="person.description" class="staff-role">{{
                       person.description
@@ -509,6 +509,7 @@ import Notification from '@/components/notification/ToastMessage.vue'
 import TrailerCarousel from '@/components/TrailerCarousel.vue'
 import { useTrailerStore } from '@/store/trailer'
 import { getRatingColor } from '@/utils/ratingUtils'
+import { deviceImage } from '@/utils/mediaUtils'
 import { buildMovieSeo, getMovieSeoEntry, getMovieSeoPath, getMovieSeoSlug } from '@/utils/movieSeo'
 
 const mainStore = useMainStore()
@@ -756,7 +757,7 @@ const setPagePoster = (url) => {
   const root = document.documentElement
   if (url && /^https?:\/\//.test(url)) {
     // Кавычки и переводы строк из адреса вырезаем — они сломали бы url("…")
-    root.style.setProperty('--page-poster', `url("${url.replace(/["\\\n]/g, '')}")`)
+    root.style.setProperty('--page-poster', `url("${deviceImage(url).replace(/["\\\n]/g, '')}")`)
     root.classList.add('has-page-poster')
   } else {
     root.style.removeProperty('--page-poster')

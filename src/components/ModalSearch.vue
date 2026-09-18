@@ -47,7 +47,7 @@
               @click="closeModal"
             >
               <img
-                :src="movie.poster"
+                :src="deviceImage(movie.poster)"
                 :alt="getMovieName(movie.raw_data) ? `Постер ${getMovieName(movie.raw_data)}` : 'Постер фильма'"
                 class="movie__poster"
                 width="110"
@@ -101,6 +101,7 @@ import { useMainStore } from '@/store/main'
 import { getRatingColor } from '@/utils/ratingUtils'
 import { getMovieName } from '@/utils/textUtils'
 import { getMovieSeoPath } from '@/utils/movieSeo'
+import { deviceImage } from '@/utils/mediaUtils'
 
 const navbarStore = useNavbarStore()
 

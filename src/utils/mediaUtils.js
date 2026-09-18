@@ -119,6 +119,29 @@ export const resolvePosterChain = (movie = {}) => {
   return [...new Set(chain)]
 }
 
+// Телевизор или старый телефон, открывший раздачу по Wi-Fi, может не
+// доверять сертификатам хостов с постерами — и видит пустые рамки. Там
+// картинки идут через компьютер: /api-backend/img отдаёт их по http.
+// В самом приложении и на обычном сайте адрес не меняется.
+const DEVICE_PROXY_HOSTS = /(^|\.)(kinopoiskapiunofficial\.tech|st\.kp\.yandex\.net|avatars\.mds\.yandex\.net|image\.tmdb\.org|m\.media-amazon\.com)$/i
+
+const isLanClient = () => {
+  if (typeof window === 'undefined' || window.electronAPI) return false
+  const host = window.location.hostname
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) || host.endsWith('.local')
+}
+
+export const deviceImage = (url) => {
+  if (!url || !isLanClient()) return url
+  try {
+    const parsed = new URL(url)
+    if (!/^https?:$/.test(parsed.protocol) || !DEVICE_PROXY_HOSTS.test(parsed.hostname)) return url
+  } catch {
+    return url
+  }
+  return `${window.location.origin}/api-backend/img?u=${encodeURIComponent(url)}`
+}
+
 export const getPlaceholderPoster = () => NO_POSTER_PLACEHOLDER
 
 export const resolvePosterSetByMovie = (movie = {}) => {

@@ -137,7 +137,7 @@ import { useAuthStore } from '@/store/auth'
 import { useMainStore } from '@/store/main'
 import { USER_LIST_TYPES_ENUM } from '@/constants'
 import { getMovieSeoPath } from '@/utils/movieSeo'
-import { resolvePosterByMovie, resolvePosterChain } from '@/utils/mediaUtils'
+import { deviceImage, resolvePosterByMovie, resolvePosterChain } from '@/utils/mediaUtils'
 
 const authStore = useAuthStore()
 const mainStore = useMainStore()
@@ -225,7 +225,7 @@ const groups = computed(() => {
 })
 
 const pathFor = (item) => getMovieSeoPath(item)
-const posterFor = (item) => resolvePosterByMovie(item)
+const posterFor = (item) => deviceImage(resolvePosterByMovie(item))
 
 const subtitleFor = (item) => {
   const parts = []
@@ -239,7 +239,7 @@ const subtitleFor = (item) => {
 const onPosterError = (event, item) => {
   const img = event.target
   if (!img) return
-  const chain = resolvePosterChain(item)
+  const chain = resolvePosterChain(item).map(deviceImage)
   const current = img.currentSrc || img.src || ''
   const next = chain[chain.findIndex((u) => u === current) + 1]
   if (next) img.src = next

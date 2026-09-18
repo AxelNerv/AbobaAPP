@@ -59,7 +59,7 @@
 import DeleteButton from '@/components/buttons/DeleteButton.vue'
 import { TYPES_ENUM } from '@/constants'
 import { useMainStore } from '@/store/main'
-import { resolvePosterByMovie, resolvePosterChain } from '@/utils/mediaUtils'
+import { deviceImage, resolvePosterByMovie, resolvePosterChain } from '@/utils/mediaUtils'
 import { getRatingColor } from '@/utils/ratingUtils'
 import imdbLogoUrl from '@/assets/icon-imdb-logo.svg'
 import kpLogoUrl from '@/assets/icon-kp-logo.svg'
@@ -89,13 +89,13 @@ const emit = defineEmits(['remove:from-history'])
 const isServerRender = import.meta.env.SSR
 
 const posterSrc = computed(() => {
-  return resolvePosterByMovie(movie)
+  return deviceImage(resolvePosterByMovie(movie))
 })
 
 const handlePosterError = (e) => {
   const img = e.target
   if (!img) return
-  const chain = resolvePosterChain(movie)
+  const chain = resolvePosterChain(movie).map(deviceImage)
   const currentSrc = img.currentSrc || img.src || ''
   const currentIdx = chain.findIndex((url) => url === currentSrc || img.src === url)
   const nextIdx = currentIdx === -1 ? 0 : currentIdx + 1

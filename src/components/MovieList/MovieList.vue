@@ -2,6 +2,7 @@
   <div>
     <div
       v-show="!loading"
+      ref="gridRef"
       class="grid"
       :class="[`card-size-${cardSize}`, `variant-${variant}`]"
     >
@@ -25,7 +26,6 @@
             :show-star="showStar"
             :variant="variant"
             @remove:from-history="removeFromHistory"
-            @save:element="(el) => (movieRefs[index] = el)"
           />
         </CardMovieSwipeWrapper>
       </template>
@@ -45,7 +45,6 @@
           :show-star="showStar"
           :variant="variant"
           @remove:from-history="removeFromHistory"
-          @save:element="(el) => (movieRefs[index] = el)"
         />
       </template>
     </div>
@@ -58,7 +57,7 @@ import Spinner from '@/components/SpinnerLoading.vue'
 import { useBackgroundStore } from '@/store/background'
 import { useMainStore } from '@/store/main'
 import { useAuthStore } from '@/store/auth'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { CardMovie, CardMovieSwipeWrapper } from '../CardMovie'
 import { delFromList } from '@/api/user'
@@ -88,8 +87,8 @@ const {
   variant: String
 })
 
-const movieRefs = ref([])
 const activeMovieIndex = ref(null)
+const gridRef = ref(null)
 
 const isCardBorder = computed(() => backgroundStore.isCardBorder)
 const isMobile = computed(() => mainStore.isMobile)
@@ -128,64 +127,80 @@ const removeFromHistory = async (kp_id) => {
   }
 }
 
+// Карточки этого списка в порядке показа. Берём из разметки, а не из
+// сохранённых ссылок: те копятся при смене списка и перестают совпадать.
+const listCards = () => [...(gridRef.value?.querySelectorAll('.movie-card') || [])]
+
+// Сколько карточек в ряду — по фактическому положению на экране. Разбор
+// grid-template-columns на старых браузерах телевизоров врёт.
+const countColumns = (cards) => {
+  const top = cards[0]?.getBoundingClientRect().top
+  const index = cards.findIndex((card) => Math.abs(card.getBoundingClientRect().top - top) > 4)
+  return index === -1 ? cards.length || 1 : index
+}
+
+const focusCard = (card) => {
+  if (!card) return
+  card.focus({ preventScroll: true })
+  card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+}
+
 const handleKeyDown = (event) => {
   // Стрелку уже обработали (например, «вниз» из строки поиска перевело фокус
   // на первую карточку) — второй раз сдвигать нельзя, иначе проскакиваем ряд.
   if (event.defaultPrevented || !moviesList?.length) return
 
-  const focusedCard =
-    event.target?.classList?.contains('movie-card') ? event.target : document.activeElement
+  // На странице бывает несколько списков, и каждый слушает клавиши.
+  // Отвечает только тот, в котором стоит фокус — иначе пульт телевизора
+  // перебрасывал фокус в соседний список «на строчку ниже».
+  const cards = listCards()
+  const currentIndex = cards.indexOf(document.activeElement)
+  if (currentIndex === -1) return
 
-  if (!focusedCard?.classList?.contains('movie-card')) {
-    return
-  }
-
-  const focusedIndex = movieRefs.value.findIndex((element) => element === focusedCard)
-  const currentIndex = activeMovieIndex.value ?? (focusedIndex >= 0 ? focusedIndex : 0)
-
-  const grid = document.querySelector('.grid')
-  const gridStyle = window.getComputedStyle(grid)
-  const columns = gridStyle.gridTemplateColumns.split(' ').length
+  const columns = countColumns(cards)
+  const column = currentIndex % columns
+  let target = null
 
   switch (event.key) {
     case 'ArrowRight':
-      activeMovieIndex.value = (currentIndex + 1) % moviesList.length
+      event.preventDefault()
+      // С последней карточки ряда никуда не прыгаем: раньше фокус уезжал
+      // в начало следующего ряда, и с пульта это выглядело как «вниз».
+      if (column < columns - 1) target = cards[currentIndex + 1]
       break
     case 'ArrowLeft': {
-      // С крайней левой карточки ряда — в боковую панель. Раньше фокус
-      // перескакивал в конец предыдущего ряда, и с пульта телевизора
-      // до панели было не добраться: список просто листался.
-      const sidebarItem =
-        document.querySelector('.sidebar .nav-item.router-link-active') ||
-        document.querySelector('.sidebar .nav-item')
-      if (currentIndex % columns === 0 && sidebarItem && sidebarItem.offsetParent !== null) {
-        event.preventDefault()
-        sidebarItem.focus()
+      event.preventDefault()
+      // С крайней левой карточки ряда — в боковую панель.
+      if (column === 0) {
+        const sidebarItem =
+          document.querySelector('.sidebar .nav-item.router-link-active') ||
+          document.querySelector('.sidebar .nav-item')
+        if (sidebarItem && sidebarItem.offsetParent !== null) sidebarItem.focus()
         break
       }
-      activeMovieIndex.value = Math.max(currentIndex - 1, 0)
+      target = cards[currentIndex - 1]
       break
     }
     case 'ArrowUp':
       event.preventDefault()
-      if (currentIndex <= 0) {
+      if (currentIndex < columns) {
         const searchInput = document.querySelector('.search-input')
-        if (searchInput) {
-          searchInput.focus()
-        }
+        if (searchInput) searchInput.focus()
       } else {
-        activeMovieIndex.value = Math.max(currentIndex - columns, 0)
+        target = cards[currentIndex - columns]
       }
       break
     case 'ArrowDown':
       event.preventDefault()
-      activeMovieIndex.value = Math.min(currentIndex + columns, moviesList.length - 1)
+      // В неполном последнем ряду — на последнюю карточку
+      if (currentIndex + columns < cards.length) target = cards[currentIndex + columns]
+      else if (Math.floor(currentIndex / columns) < Math.floor((cards.length - 1) / columns)) target = cards[cards.length - 1]
       break
     case 'Home':
-      activeMovieIndex.value = 0
+      target = cards[0]
       break
     case 'End':
-      activeMovieIndex.value = moviesList.length - 1
+      target = cards[cards.length - 1]
       break
     case 'Enter':
       if (event.ctrlKey || event.metaKey) {
@@ -196,18 +211,12 @@ const handleKeyDown = (event) => {
       }
       break
   }
-}
 
-watch(activeMovieIndex, (newIndex) => {
-  if (movieRefs.value[newIndex]) {
-    movieRefs.value[newIndex].scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-      inline: 'center'
-    })
-    movieRefs.value[newIndex].focus()
+  if (target) {
+    activeMovieIndex.value = cards.indexOf(target)
+    focusCard(target)
   }
-})
+}
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)

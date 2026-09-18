@@ -56,7 +56,7 @@
             <div class="poster-wrap">
               <img
                 v-if="(currentMovie.cover || currentMovie.poster) && !posterError"
-                :src="currentMovie.cover || currentMovie.poster"
+                :src="deviceImage(currentMovie.cover || currentMovie.poster)"
                 :alt="currentMovie.title"
                 class="poster"
                 @error="posterError = true"
@@ -158,6 +158,7 @@ import AppIcon from '@/components/icons/AppIcon.vue'
 import { useRouter } from 'vue-router'
 import { useRandomHistoryStore } from '@/store/randomHistory'
 import { getMovieSeoPath } from '@/utils/movieSeo'
+import { deviceImage } from '@/utils/mediaUtils'
 
 const props = defineProps({
   isOpen: Boolean,

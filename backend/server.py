@@ -373,6 +373,100 @@ async def _get_session_for(provider: str) -> aiohttp.ClientSession:
     return _fresh_http_session
 
 
+# ── Постеры для устройств в сети ──
+# Телевизор или старый телефон, открывший раздачу, часто не доверяет свежим
+# сертификатам (kinopoiskapiunofficial — Let's Encrypt с корнем ISRG Root X2),
+# и постеры у него просто не грузятся. Компьютер тянет картинку сам и отдаёт
+# по обычному http из той же раздачи. Только картинки и только с известных
+# хостов — иначе это превратилось бы в открытый прокси.
+IMAGE_HOSTS = (
+    "kinopoiskapiunofficial.tech",
+    "st.kp.yandex.net",
+    "avatars.mds.yandex.net",
+    "image.tmdb.org",
+    "m.media-amazon.com",
+)
+IMAGE_MAX_BYTES = 4 * 1024 * 1024
+IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024
+_image_cache: "dict[str, tuple[str, bytes]]" = {}
+_image_cache_size = 0
+_image_cache_lock = threading.Lock()
+
+
+def _image_host_allowed(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme in ("http", "https") and any(
+        host == allowed or host.endswith("." + allowed) for allowed in IMAGE_HOSTS
+    )
+
+
+def _image_cache_put(url: str, ctype: str, body: bytes) -> None:
+    global _image_cache_size
+    with _image_cache_lock:
+        if url in _image_cache:
+            return
+        _image_cache[url] = (ctype, body)
+        _image_cache_size += len(body)
+        # dict хранит порядок вставки — выкидываем самые старые
+        while _image_cache_size > IMAGE_CACHE_MAX_BYTES and _image_cache:
+            old = next(iter(_image_cache))
+            _image_cache_size -= len(_image_cache.pop(old)[1])
+
+
+@app.get("/img")
+async def image_proxy(u: str):
+    if not _image_host_allowed(u):
+        raise HTTPException(400, "host not allowed")
+    headers = {"Cache-Control": "public, max-age=604800"}
+    with _image_cache_lock:
+        hit = _image_cache.get(u)
+    if hit:
+        return Response(content=hit[1], media_type=hit[0], headers=headers)
+
+    session = await _get_http_session()
+    # Без webp/avif в Accept: старые браузеры телевизоров их не показывают
+    request_headers = {**_BROWSER_HEADERS, "Accept": "image/jpeg,image/png,image/gif;q=0.9,*/*;q=0.5"}
+    url = u
+    try:
+        # Кинопоиск отвечает редиректом на avatars.mds — каждый шаг проверяем
+        for _ in range(4):
+            async with session.get(
+                url,
+                headers=request_headers,
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=10, connect=4),
+            ) as resp:
+                if resp.status in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("Location", "")
+                    url = str(resp.url.join(type(resp.url)(location)))
+                    if not _image_host_allowed(url):
+                        raise HTTPException(502, "redirect not allowed")
+                    continue
+                ctype = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                if resp.status != 200 or not ctype.startswith("image/"):
+                    raise HTTPException(404, "no image")
+                # read(n) отдаёт то, что уже пришло, а не весь файл —
+                # читаем до конца, следя за размером
+                chunks, size = [], 0
+                async for chunk in resp.content.iter_chunked(64 * 1024):
+                    size += len(chunk)
+                    if size > IMAGE_MAX_BYTES:
+                        raise HTTPException(413, "image too large")
+                    chunks.append(chunk)
+                body = b"".join(chunks)
+                _image_cache_put(u, ctype, body)
+                return Response(content=body, media_type=ctype, headers=headers)
+    except HTTPException:
+        raise
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+        raise HTTPException(502, "image fetch failed")
+    raise HTTPException(502, "too many redirects")
+
+
 @app.get("/ext-health")
 async def ext_health():
     """Какие источники сейчас выключены брейкером.
