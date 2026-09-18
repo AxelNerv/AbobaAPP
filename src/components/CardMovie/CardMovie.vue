@@ -83,9 +83,9 @@ onMounted(() => {
   --card-bg: rgba(255,255,255,0.04);
   --card-border-color: transparent;
   --card-shadow: none;
-  --card-hover-shadow: 0 16px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,229,255,0.15);
+  --card-hover-shadow: 0 16px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--accent-rgb),0.15);
   --card-focus-outline: 2px solid var(--accent-color);
-  --card-focus-shadow: 0 0 0 3px rgba(0,229,255,0.2);
+  --card-focus-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.2);
   --card-hover-translate: -5px;
   --card-hover-scale: 1.0;
   text-decoration: none;

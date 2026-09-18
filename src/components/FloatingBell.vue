@@ -266,8 +266,8 @@ onUnmounted(() => {
 .settings-btn { box-sizing: border-box; }
 .settings-btn.active {
   color: var(--accent-color);
-  border-color: rgba(0, 229, 255, 0.55);
-  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .bell-btn {
@@ -276,7 +276,7 @@ onUnmounted(() => {
   height: 40px;
   border-radius: 50%;
   background: rgba(15, 20, 32, 0.85);
-  border: 1px solid rgba(0, 229, 255, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   display: flex;
@@ -287,8 +287,8 @@ onUnmounted(() => {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .bell-btn:hover {
-  background: rgba(0, 229, 255, 0.1);
-  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.5);
   color: #fff;
 }
 .bell-btn i { font-size: 16px; }
@@ -318,7 +318,7 @@ onUnmounted(() => {
   right: 0;
   width: 320px;
   background: rgba(10, 12, 24, 0.98);
-  border: 1px solid rgba(0, 229, 255, 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(14px);
@@ -388,8 +388,8 @@ onUnmounted(() => {
   margin: 4px 0 6px;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(0, 229, 255, 0.35);
-  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent-color, #00e5ff);
   font-size: 12px;
   font-weight: 600;

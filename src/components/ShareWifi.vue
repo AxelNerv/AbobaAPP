@@ -3,7 +3,7 @@
     <header class="settings-head">
       <div>
         <h1 class="settings-title">Настройки</h1>
-        <p class="settings-lead">Вход, обновления, данные и раздача на телефон.</p>
+        <p class="settings-lead">Вход, обновления, оформление, данные и раздача на телефон.</p>
       </div>
       <div v-if="isApp" class="settings-head-actions">
         <span v-if="updateState.current" class="settings-version">v{{ updateState.current }}</span>
@@ -15,8 +15,9 @@
 
     <div v-if="!isApp" class="card card--muted">
       <AppIcon name="info" :size="20" />
-      <p>Настройки работают только в приложении. В браузере эта страница ничего не делает.</p>
+      <p>Остальные настройки работают только в приложении.</p>
     </div>
+    <InterfaceSettings v-if="!isApp" class="interface-standalone" />
 
     <template v-else>
       <p v-if="error" class="notice notice--error" role="alert">{{ error }}</p>
@@ -106,6 +107,8 @@
           </p>
         </section>
 
+        <InterfaceSettings class="span-6" />
+
         <!-- Данные -->
         <section class="card span-6">
           <div class="card-head">
@@ -193,6 +196,7 @@
 import { ref, onMounted, computed } from 'vue'
 import QrcodeVue from 'qrcode.vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import InterfaceSettings from '@/components/InterfaceSettings.vue'
 import { getSyncStatus, importLibrary } from '@/api/user'
 import { useAuthStore } from '@/store/auth'
 import { checkForUpdates, hasPendingUpdate, installUpdate, startUpdateWatch, updateActionLabel, updateState } from '@/utils/appUpdates'
@@ -437,7 +441,7 @@ onMounted(async () => {
 .card {
   min-width: 0;
   background: rgba(15, 20, 32, 0.72);
-  border: 1px solid rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.1);
   border-radius: 14px;
   padding: 20px 22px;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.25);
@@ -486,7 +490,7 @@ onMounted(async () => {
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.3);
 }
-.dot.ok { background: var(--accent-color, #00e5ff); box-shadow: 0 0 8px rgba(0, 229, 255, 0.6); }
+.dot.ok { background: var(--accent-color, #00e5ff); box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.6); }
 .dot.error { background: #ff5e8a; }
 .badge {
   font-size: 11px;
@@ -500,8 +504,8 @@ onMounted(async () => {
 .badge.ok,
 .badge.accent {
   color: var(--accent-color, #00e5ff);
-  background: rgba(0, 229, 255, 0.08);
-  border-color: rgba(0, 229, 255, 0.22);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.22);
 }
 .badge.error {
   color: #ff8aa8;
@@ -536,18 +540,18 @@ onMounted(async () => {
   transition: background 0.15s, border-color 0.15s;
 }
 .btn:hover:not(:disabled) {
-  background: rgba(0, 229, 255, 0.08);
-  border-color: rgba(0, 229, 255, 0.3);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn-primary {
   color: var(--accent-color, #00e5ff);
-  background: rgba(0, 229, 255, 0.1);
-  border-color: rgba(0, 229, 255, 0.32);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.32);
 }
 .btn-primary:hover:not(:disabled) {
-  background: rgba(0, 229, 255, 0.18);
-  border-color: rgba(0, 229, 255, 0.55);
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.55);
 }
 .btn-warn {
   color: #1a1204;
@@ -595,7 +599,7 @@ onMounted(async () => {
   font-size: 13px;
   outline: none;
 }
-.field-input:focus { border-color: rgba(0, 229, 255, 0.5); }
+.field-input:focus { border-color: rgba(var(--accent-rgb), 0.5); }
 .field-hint {
   display: block;
   margin-top: 6px;
@@ -665,8 +669,8 @@ onMounted(async () => {
   transition: background 0.15s, border-color 0.15s;
 }
 .tile:hover:not(:disabled) {
-  background: rgba(0, 229, 255, 0.06);
-  border-color: rgba(0, 229, 255, 0.3);
+  background: rgba(var(--accent-rgb), 0.06);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 .tile:disabled { opacity: 0.5; cursor: default; }
 .tile-label { font-size: 12.5px; font-weight: 600; color: #e8eaf0; }
@@ -704,8 +708,8 @@ onMounted(async () => {
   margin-top: 14px;
   padding: 14px;
   border-radius: 11px;
-  border: 1px solid rgba(0, 229, 255, 0.18);
-  background: rgba(0, 229, 255, 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.04);
 }
 .share-qr {
   padding: 8px;
@@ -729,8 +733,8 @@ onMounted(async () => {
   border-radius: 10px;
   font-size: 12.5px;
   color: rgba(255, 255, 255, 0.75);
-  background: rgba(0, 229, 255, 0.06);
-  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
 }
 .notice--error {
   color: #ff8aa8;
@@ -740,6 +744,7 @@ onMounted(async () => {
 
 /* Во всплывающем окне отступы даёт само окно, а значки в углу оно перекрывает */
 .settings-page--embedded { padding: 0; max-width: none; }
+.interface-standalone { margin-top: 14px; }
 .settings-page--embedded .settings-head { padding-right: 48px; }
 
 @media (max-width: 900px) {

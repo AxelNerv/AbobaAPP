@@ -967,7 +967,7 @@ const loadSavedProgress = async () => {
   const players = savedProgress.value?.players || {}
   await Promise.all(
     Object.entries(players).map(([family, saved]) =>
-      saved?.entries ? sendRestore(saved.frames || saved.entries, `https://player.${family}/`) : null
+      saved?.entries ? sendRestore(saved.frames || saved.entries, `https://player.${family}/`, saved.summary) : null
     )
   )
 }
@@ -976,9 +976,12 @@ const loadSavedProgress = async () => {
 // из Vue он скопировать не может и падает прямо в момент вызова.
 const plain = (value) => JSON.parse(JSON.stringify(value))
 
-const sendRestore = async (entries, src) => {
+// summary — где остановился (время, длительность): по нему плеер
+// перематывается при первом запуске, если сам начал с нуля.
+const sendRestore = async (entries, src, summary) => {
   try {
-    return await window.electronAPI.player.restoreProgress(plain(entries), src)
+    const resume = summary ? { time: summary.time, duration: summary.duration } : null
+    return await window.electronAPI.player.restoreProgress(plain(entries), src, resume)
   } catch {
     return false
   }
@@ -990,7 +993,7 @@ const restoreProgressFor = (player) => {
   if (!progressSupported || !saved?.entries) return
   // frames — записи по окнам плеера (VIBIX хранит позицию во вложенном окне);
   // у позиций, сохранённых раньше, есть только общий набор entries.
-  sendRestore(saved.frames || saved.entries, player.iframe)
+  sendRestore(saved.frames || saved.entries, player.iframe, saved.summary)
 }
 
 const saveProgress = async () => {
@@ -1124,8 +1127,8 @@ onBeforeUnmount(() => {
   margin: 0 auto 10px;
   padding: 8px 14px;
   border-radius: 10px;
-  background: rgba(0, 229, 255, 0.06);
-  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   color: rgba(255, 255, 255, 0.7);
   font-size: 13px;
   text-align: center;
@@ -1193,7 +1196,7 @@ onBeforeUnmount(() => {
 }
 
 .player-btn:hover {
-  border-color: rgba(0,229,255,0.28);
+  border-color: rgba(var(--accent-rgb),0.28);
   background: rgba(255,255,255,0.06);
   color: var(--accent-color);
 }
@@ -1237,7 +1240,7 @@ onBeforeUnmount(() => {
 }
 
 .source-btn:hover {
-  border-color: rgba(0,229,255,0.28);
+  border-color: rgba(var(--accent-rgb),0.28);
   color: var(--accent-color);
 }
 

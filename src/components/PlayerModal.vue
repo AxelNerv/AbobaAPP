@@ -195,7 +195,7 @@ const groupHasWarning = (group) => groupPlayers(group).some((player) => player.w
   /* Минималистичная рамка как у модалки поиска (rgba 0.22) — без неонового свечения вокруг.
      Раньше было border: 1px solid var(--accent-color) + box-shadow: var(--neon-glow),
      что давало "двойное" жирное свечение. */
-  border: 1px solid rgba(0, 229, 255, 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   padding: 18px 16px;
   border-radius: 10px;
   width: 90%;
@@ -230,7 +230,7 @@ h2 {
   font-weight: 600;
   color: var(--accent-color);
   /* лёгкая cyan-подсветка текста вместо жёсткого неонового свечения */
-  text-shadow: 0 0 6px rgba(0, 229, 255, 0.25);
+  text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.25);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -291,8 +291,8 @@ h2 {
 .group-item:hover {
   border-color: var(--accent-color);
   color: var(--accent-color);
-  background: rgba(0, 229, 255, 0.08);
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.15);
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.15);
 }
 
 .player-item.active,
@@ -301,7 +301,7 @@ h2 {
      Неоновое свечение убрано чтобы было аккуратнее (как стиль модалки поиска). */
   border-color: var(--accent-color);
   color: var(--accent-color);
-  background: rgba(0, 229, 255, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .warning-icon {

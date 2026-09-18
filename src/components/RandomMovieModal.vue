@@ -265,7 +265,7 @@ const goToMovie = () => {
 
 .rnd-modal {
   background: #0f1420;
-  border: 1px solid rgba(0,229,255,0.18);
+  border: 1px solid rgba(var(--accent-rgb),0.18);
   border-radius: 16px;
   width: 760px; max-width: 100%;
   max-height: 90vh;
@@ -299,7 +299,7 @@ const goToMovie = () => {
 
 .divider {
   height: 1px;
-  background: linear-gradient(to right, transparent, rgba(0,229,255,0.25), transparent);
+  background: linear-gradient(to right, transparent, rgba(var(--accent-rgb),0.25), transparent);
   margin: 0 20px;
 }
 
@@ -327,7 +327,7 @@ const goToMovie = () => {
   transition: border-color 0.15s;
 }
 .yf-input:focus {
-  border-color: rgba(0,229,255,0.5);
+  border-color: rgba(var(--accent-rgb),0.5);
 }
 .yf-input::-webkit-inner-spin-button,
 .yf-input::-webkit-outer-spin-button {
@@ -340,8 +340,8 @@ const goToMovie = () => {
 .yf-apply {
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(0,229,255,0.4);
-  background: rgba(0,229,255,0.1);
+  border: 1px solid rgba(var(--accent-rgb),0.4);
+  background: rgba(var(--accent-rgb),0.1);
   color: var(--accent-color);
   font-size: 12px;
   font-weight: 500;
@@ -349,7 +349,7 @@ const goToMovie = () => {
   transition: all 0.15s;
 }
 .yf-apply:hover:not(:disabled) {
-  background: rgba(0,229,255,0.2);
+  background: rgba(var(--accent-rgb),0.2);
 }
 .yf-apply:disabled {
   opacity: 0.4;
@@ -421,8 +421,8 @@ const goToMovie = () => {
 
 .type-badge {
   display: inline-block;
-  background: rgba(0,229,255,0.12);
-  border: 1px solid rgba(0,229,255,0.3);
+  background: rgba(var(--accent-rgb),0.12);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
   color: var(--accent-color);
   font-size: 10px;
   font-weight: 700;
@@ -501,7 +501,7 @@ const goToMovie = () => {
   cursor: pointer;
 
   &:hover {
-    border-color: rgba(0,229,255,0.3);
+    border-color: rgba(var(--accent-rgb),0.3);
     color: var(--accent-color);
   }
 
@@ -522,7 +522,7 @@ const goToMovie = () => {
 
 .spinner {
   width: 36px; height: 36px;
-  border: 3px solid rgba(0,229,255,0.15);
+  border: 3px solid rgba(var(--accent-rgb),0.15);
   border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -532,15 +532,15 @@ const goToMovie = () => {
 
 .primary-btn {
   padding: 8px 16px;
-  background: rgba(0,229,255,0.08);
-  border: 1px solid rgba(0,229,255,0.3);
+  background: rgba(var(--accent-rgb),0.08);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
   color: var(--accent-color);
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
   transition: all 0.15s;
-  &:hover { background: rgba(0,229,255,0.18); }
+  &:hover { background: rgba(var(--accent-rgb),0.18); }
 }
 
 .footer {
@@ -572,12 +572,12 @@ const goToMovie = () => {
 }
 
 .watch-btn {
-  background: rgba(0,229,255,0.08) !important;
-  border-color: rgba(0,229,255,0.35) !important;
+  background: rgba(var(--accent-rgb),0.08) !important;
+  border-color: rgba(var(--accent-rgb),0.35) !important;
   color: var(--accent-color) !important;
 
   &:hover:not(:disabled) {
-    background: rgba(0,229,255,0.18) !important;
+    background: rgba(var(--accent-rgb),0.18) !important;
   }
 }
 

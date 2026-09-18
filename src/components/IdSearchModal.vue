@@ -144,9 +144,9 @@ onUnmounted(() => {
 .id-search-modal {
   position: relative;
   background: rgba(10, 12, 24, 0.97);
-  border: 1px solid rgba(0, 229, 255, 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6),
-              0 0 40px rgba(0, 229, 255, 0.08);
+              0 0 40px rgba(var(--accent-rgb), 0.08);
   border-radius: 14px;
   padding: 28px 26px 24px;
   width: 100%;
@@ -180,8 +180,8 @@ onUnmounted(() => {
 
   &:hover {
     color: #fff;
-    border-color: rgba(0, 229, 255, 0.35);
-    background: rgba(0, 229, 255, 0.08);
+    border-color: rgba(var(--accent-rgb), 0.35);
+    background: rgba(var(--accent-rgb), 0.08);
   }
 }
 
@@ -217,14 +217,14 @@ onUnmounted(() => {
     font-weight: 500;
 
     &:hover {
-      border-color: rgba(0, 229, 255, 0.35);
+      border-color: rgba(var(--accent-rgb), 0.35);
       color: #fff;
     }
 
     &.active {
-      border-color: rgba(0, 229, 255, 0.6);
+      border-color: rgba(var(--accent-rgb), 0.6);
       color: var(--accent-color);
-      background: rgba(0, 229, 255, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
   }
 }
@@ -250,9 +250,9 @@ onUnmounted(() => {
   }
 
   &:focus {
-    border-color: rgba(0, 229, 255, 0.5);
-    background: rgba(0, 229, 255, 0.04);
-    box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.04);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 }
 
@@ -276,7 +276,7 @@ onUnmounted(() => {
 
     &:hover {
       color: var(--accent-color);
-      background: rgba(0, 229, 255, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
   }
 

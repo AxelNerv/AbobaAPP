@@ -569,13 +569,13 @@ const fetchRandomMovie = async (opts = {}) => {
 .search-type-buttons button:hover {
   border-color: var(--accent-color);
   color: var(--accent-color);
-  background: rgba(0,229,255,0.07);
+  background: rgba(var(--accent-rgb),0.07);
 }
 
 .random-button {
-  background: rgba(0,229,255,0.08) !important;
+  background: rgba(var(--accent-rgb),0.08) !important;
   color: var(--accent-color) !important;
-  border: 1px solid rgba(0,229,255,0.28) !important;
+  border: 1px solid rgba(var(--accent-rgb),0.28) !important;
   border-radius: 8px;
   padding: 6px 14px !important;
   font-size: 12px !important;
@@ -588,7 +588,7 @@ const fetchRandomMovie = async (opts = {}) => {
 }
 
 .random-button:hover:not(:disabled) {
-  background: rgba(0,229,255,0.16) !important;
+  background: rgba(var(--accent-rgb),0.16) !important;
   transform: none;
 }
 
@@ -631,7 +631,7 @@ const fetchRandomMovie = async (opts = {}) => {
 .search-input::placeholder { color: rgba(255,255,255,0.26); }
 
 .search-input:focus {
-  border-color: rgba(0,229,255,0.4);
+  border-color: rgba(var(--accent-rgb),0.4);
   background: rgba(255,255,255,0.07);
   box-shadow: none;
 }

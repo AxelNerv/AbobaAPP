@@ -140,7 +140,7 @@ const handlePosterError = (e) => {
 }
 
 :deep(.movie-card:hover) .movie-poster-frame {
-  box-shadow: 0 0 0 1px rgba(0,229,255,0.18);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb),0.18);
 }
 
 .movie-poster-frame::before {
@@ -169,7 +169,7 @@ const handlePosterError = (e) => {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(0,229,255,0.1);
+  background: rgba(var(--accent-rgb),0.1);
   opacity: 0;
   transition: opacity 0.18s;
   pointer-events: none;

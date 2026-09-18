@@ -447,7 +447,7 @@ onMounted(load)
 }
 
 .lib-search-input:focus {
-  border-color: rgba(0, 229, 255, 0.45);
+  border-color: rgba(var(--accent-rgb), 0.45);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -532,8 +532,8 @@ onMounted(load)
 }
 
 .lib-chip.active {
-  border-color: rgba(0, 229, 255, 0.5);
-  background: rgba(0, 229, 255, 0.12);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent-color, #00e5ff);
 }
 
@@ -609,9 +609,9 @@ onMounted(load)
 
 .lib-card:hover {
   transform: translateY(-3px);
-  background: rgba(0, 229, 255, 0.06);
-  border-color: rgba(0, 229, 255, 0.4);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(0, 229, 255, 0.1);
+  background: rgba(var(--accent-rgb), 0.06);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(var(--accent-rgb), 0.1);
 }
 
 .lib-poster-link {

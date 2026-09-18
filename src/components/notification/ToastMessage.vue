@@ -72,7 +72,7 @@ defineExpose({ showNotification })
   left: auto;
   transform: none;
   background: rgba(15, 20, 32, 0.97);
-  border: 1px solid rgba(0, 229, 255, 0.25);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   color: var(--text-color);
   padding: 10px 14px;
   border-radius: 10px;

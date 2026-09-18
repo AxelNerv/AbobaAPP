@@ -332,7 +332,7 @@ handle('player:read-progress', async (src) => {
     return null
   }
 })
-handle('player:restore-progress', async (entries, src) => restorePlayerProgress(entries, String(src || '')))
+handle('player:restore-progress', async (entries, src, resume) => restorePlayerProgress(entries, String(src || ''), resume))
 
 handle('share:status', async () => ({
   active: lanShare.isSharing(),

@@ -8,22 +8,23 @@
 
 :root {
   /* Midnight + Cyan */
+  --accent-rgb: 0, 229, 255;
   --accent-color: #00e5ff;
   --accent-hover: #00b0ff;
   --accent-light: #6ff9ff;
   --accent-dark: #0091ea;
-  --accent-transparent: rgba(0, 229, 255, 0.09);
-  --accent-semi-transparent: rgba(0, 229, 255, 0.25);
-  --accent2: #00b0ff;
+  --accent-transparent: rgba(var(--accent-rgb), 0.09);
+  --accent-semi-transparent: rgba(var(--accent-rgb), 0.25);
+  --accent2: var(--accent-hover);
 
-  --neon-glow: 0 0 8px rgba(0,229,255,0.35), 0 0 20px rgba(0,229,255,0.15);
-  --neon-glow-hover: 0 0 12px rgba(0,229,255,0.5), 0 0 30px rgba(0,229,255,0.25);
-  --neon-border: 1px solid rgba(0,229,255,0.3);
+  --neon-glow: 0 0 8px rgba(var(--accent-rgb),0.35), 0 0 20px rgba(var(--accent-rgb),0.15);
+  --neon-glow-hover: 0 0 12px rgba(var(--accent-rgb),0.5), 0 0 30px rgba(var(--accent-rgb),0.25);
+  --neon-border: 1px solid rgba(var(--accent-rgb),0.3);
 
-  --secondary-color: #00e5ff;
-  --secondary-hover: #00b8d4;
-  --success-color: #00e5ff;
-  --success-hover: #00b8d4;
+  --secondary-color: var(--accent-color);
+  --secondary-hover: var(--accent-hover);
+  --success-color: var(--accent-color);
+  --success-hover: var(--accent-hover);
   --error-color: #ff5252;
   --error-hover: #ff1744;
   --warning-color: #ffca28;
@@ -42,9 +43,9 @@
   --text-secondary: rgba(232,234,240,0.6);
 
   --border-color: rgba(255,255,255,0.07);
-  --border-hover: rgba(0,229,255,0.25);
+  --border-hover: rgba(var(--accent-rgb),0.25);
   --border-focus: var(--accent-color);
-  --border-accent: rgba(0,229,255,0.15);
+  --border-accent: rgba(var(--accent-rgb),0.15);
 }
 
 html { scroll-behavior: smooth; }
@@ -70,6 +71,25 @@ body::before {
     radial-gradient(ellipse 50% 50% at 10% 50%, rgba(0, 150, 200, 0.10) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Фон выбирается в настройках (store/theme.js) */
+html[data-bg='accent'] body::before {
+  background:
+    radial-gradient(ellipse 80% 70% at 50% 0%, rgba(var(--accent-rgb), 0.16) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 60% at 85% 100%, rgba(var(--accent-rgb), 0.1) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 50% at 10% 50%, rgba(var(--accent-rgb), 0.06) 0%, transparent 70%);
+}
+
+html[data-bg='plain'] body::before {
+  background: none;
+}
+
+/* Размытый постер открытого фильма; на остальных страницах — обычное сияние */
+html[data-bg='poster'].has-page-poster body::before {
+  inset: -60px;
+  background: var(--page-poster) center / cover no-repeat;
+  filter: blur(40px) saturate(1.3) brightness(0.35);
 }
 
 html.no-scroll, body.no-scroll { overflow: hidden; height: 100%; }

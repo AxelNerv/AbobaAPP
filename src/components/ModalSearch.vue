@@ -292,9 +292,9 @@ watch(searchTerm, () => {
     display: flex;
     flex-direction: column;
     background: rgba(10, 12, 24, 0.97);
-    border: 1px solid rgba(0, 229, 255, 0.22);
+    border: 1px solid rgba(var(--accent-rgb), 0.22);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6),
-                0 0 40px rgba(0, 229, 255, 0.08);
+                0 0 40px rgba(var(--accent-rgb), 0.08);
     padding: 22px;
     border-radius: 14px;
     max-width: 80%;
@@ -440,9 +440,9 @@ watch(searchTerm, () => {
 
   &:focus {
     outline: none;
-    border-color: rgba(0, 229, 255, 0.5);
-    background: rgba(0, 229, 255, 0.04);
-    box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.04);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
   &.wrong-layout {

@@ -201,7 +201,7 @@ export default {
 
 .login-card {
   background: #0f1420;
-  border: 1px solid rgba(0, 229, 255, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 14px;
   padding: 28px 24px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
@@ -219,7 +219,7 @@ export default {
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(0, 229, 255, 0.15);
+  border: 3px solid rgba(var(--accent-rgb), 0.15);
   border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
@@ -285,8 +285,8 @@ export default {
   gap: 10px;
   padding: 11px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(0, 229, 255, 0.28);
-  background: rgba(0, 229, 255, 0.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--accent-rgb), 0.07);
   color: var(--accent-color);
   font-weight: 500;
   font-size: 13px;
@@ -295,7 +295,7 @@ export default {
 }
 
 .qr-btn:hover {
-  background: rgba(0, 229, 255, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
 }
 
 .qr-icon {
@@ -328,7 +328,7 @@ export default {
 
 .modal-content {
   background: #0f1420;
-  border: 1px solid rgba(0, 229, 255, 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
   border-radius: 14px;
   padding: 22px;
   width: 380px;

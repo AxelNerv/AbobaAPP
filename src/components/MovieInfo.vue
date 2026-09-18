@@ -435,6 +435,51 @@
           />
         </div>
 
+        <!-- Секция с сиквелами и приквелами -->
+        <div v-if="sequelsAndPrequels.length" class="related-movies">
+          <div class="related-movies-header">
+            <h2>Сиквелы и приквелы</h2>
+          </div>
+          <MovieList
+            :movies-list="
+              showAllSequels ? sequelsAndPrequels : sequelsAndPrequels.slice(0, itemsPerRow)
+            "
+            :loading="false"
+            :is-history="false"
+            variant="related"
+            class="related-movies-list"
+          />
+          <a
+            v-if="sequelsAndPrequels.length > itemsPerRow"
+            class="expand-circle-button"
+            :title="`${showAllSequels ? 'Скрыть' : 'Показать все'} (${sequelsAndPrequels.length})`"
+            @click="showAllSequels = !showAllSequels"
+          >
+            {{ showAllSequels ? '−' : `+${sequelsAndPrequels.length - itemsPerRow}` }}
+          </a>
+        </div>
+
+        <!-- Секция с похожими фильмами -->
+        <div v-if="similars.length" class="related-movies">
+          <div class="related-movies-header">
+            <h2>Похожие</h2>
+          </div>
+          <MovieList
+            :movies-list="showAllSimilars ? similars : similars.slice(0, itemsPerRow)"
+            :loading="false"
+            :is-history="false"
+            variant="related"
+            class="related-movies-list"
+          />
+          <a
+            v-if="similars.length > itemsPerRow"
+            class="expand-circle-button"
+            :title="`${showAllSimilars ? 'Скрыть' : 'Показать все'} (${similars.length})`"
+            @click="showAllSimilars = !showAllSimilars"
+          >
+            {{ showAllSimilars ? '−' : `+${similars.length - itemsPerRow}` }}
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -446,6 +491,8 @@ import { getKpInfo } from '@/api/movies'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { handleApiError } from '@/constants'
 import { addToList } from '@/api/user'
+import { MovieList } from '@/components/MovieList/'
+import { getRelated } from '@/api/related'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'
 import { TYPES_ENUM, USER_LIST_TYPES_ENUM } from '@/constants'
@@ -554,6 +601,11 @@ const clientReady = ref(false)
 
 const areTrailersActive = computed(() => trailerStore.areTrailersActive)
 const activeTrailerIndex = ref(null)
+const showAllSequels = ref(false)
+const showAllSimilars = ref(false)
+
+const itemsPerRow = ref(10)
+
 const syncCanonicalMovieRoute = async () => {
   if (!movieInfo.value) {
     return
@@ -699,6 +751,19 @@ const copyMovieMeta = async () => {
   }
 }
 
+// Для фона «Постер фильма» (настройки → Интерфейс)
+const setPagePoster = (url) => {
+  const root = document.documentElement
+  if (url && /^https?:\/\//.test(url)) {
+    // Кавычки и переводы строк из адреса вырезаем — они сломали бы url("…")
+    root.style.setProperty('--page-poster', `url("${url.replace(/["\\\n]/g, '')}")`)
+    root.classList.add('has-page-poster')
+  } else {
+    root.style.removeProperty('--page-poster')
+    root.classList.remove('has-page-poster')
+  }
+}
+
 const fetchMovieInfo = async (updateHistory = true) => {
   try {
     const response = await getKpInfo(kp_id.value, authStore.token)
@@ -738,6 +803,7 @@ const fetchMovieInfo = async (updateHistory = true) => {
     if (movieToSave.poster) {
       backgroundStore.updateMoviePoster(movieToSave.poster)
     }
+    setPagePoster(movieToSave.poster)
 
     const isHistoryAllowed = computed(() => mainStore.isHistoryAllowed)
 
@@ -788,6 +854,34 @@ const videos = computed(() => {
   return movieInfo.value?.videos || []
 })
 
+const sequelsAndPrequels = ref([])
+const similars = ref([])
+
+// Отдельно от основной загрузки: связанное не должно задерживать страницу.
+const loadRelated = async (id) => {
+  sequelsAndPrequels.value = []
+  similars.value = []
+  showAllSequels.value = false
+  showAllSimilars.value = false
+  if (!id) return
+  const related = await getRelated(id)
+  if (String(id) !== String(kp_id.value)) return
+  sequelsAndPrequels.value = related.sequels
+  similars.value = related.similars
+  setTimeout(updateItemsPerRow, 50)
+}
+
+const updateItemsPerRow = () => {
+  const containerWidth = document.querySelector('.related-movies')?.clientWidth || 0
+  const itemWidth = 140 + 20
+  const newItemsPerRow = Math.floor(containerWidth / itemWidth) || 10
+  itemsPerRow.value = Math.max(1, newItemsPerRow)
+}
+
+const onResize = () => {
+  updateItemsPerRow()
+}
+
 const onKeyDown = (event) => {
   if (event.altKey && event.keyCode === 84) {
     const playerComponent = document.querySelector('.player-container')
@@ -809,9 +903,12 @@ onMounted(async () => {
   // markRaw обязателен: без него Vue делает реактивным весь объект компонента
   // и предупреждает о лишних затратах. Компонент не меняется — следить не за чем.
   moviePlayerComponent.value = markRaw((await import('@/components/PlayerComponent.vue')).default)
+  loadRelated(kp_id.value)
   await fetchMovieInfo()
   infoLoading.value = false
   document.addEventListener('keydown', onKeyDown)
+  window.addEventListener('resize', onResize)
+  setTimeout(updateItemsPerRow, 100)
 })
 
 // Сравниваем текущий фильм с тем что в random-истории.
@@ -831,7 +928,9 @@ const syncRandomState = () => {
 
 onUnmounted(async () => {
   navbarStore.clearHeaderContent()
+  setPagePoster(null)
   document.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
 })
 
 watch(
@@ -842,6 +941,7 @@ watch(
       kp_id.value = newKpId
       activeTrailerIndex.value = null
       syncRandomState()
+      loadRelated(newKpId)
       await fetchMovieInfo()
       infoLoading.value = false
     }

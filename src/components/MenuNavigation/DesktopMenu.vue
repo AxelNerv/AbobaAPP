@@ -155,7 +155,7 @@ onBeforeUnmount(() => {
   left: 0; top: 0; bottom: 0;
   width: 60px;
   background: linear-gradient(180deg, #090e1c 0%, #07090f 100%);
-  border-right: 1px solid rgba(0,229,255,0.07);
+  border-right: 1px solid rgba(var(--accent-rgb),0.07);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -176,16 +176,16 @@ onBeforeUnmount(() => {
 
 .sidebar-logo {
   width: 38px; height: 38px;
-  background: linear-gradient(135deg, #00e5ff, #00b8d4);
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
   border-radius: 11px;
   display: flex; align-items: center; justify-content: center;
   font-weight: 900; font-size: 15px; color: #000;
   margin-bottom: 24px; flex-shrink: 0;
-  box-shadow: 0 0 16px rgba(0,229,255,0.3);
+  box-shadow: 0 0 16px rgba(var(--accent-rgb),0.3);
   cursor: pointer;
   letter-spacing: -1px;
   transition: box-shadow 0.2s;
-  &:hover { box-shadow: 0 0 24px rgba(0,229,255,0.5); }
+  &:hover { box-shadow: 0 0 24px rgba(var(--accent-rgb),0.5); }
 }
 .logo-ab { font-family: 'Inter', sans-serif; font-weight: 900; }
 
@@ -227,15 +227,15 @@ onBeforeUnmount(() => {
   text-align: left;
 
   &:hover {
-    background: rgba(0, 229, 255, 0.08);
+    background: rgba(var(--accent-rgb), 0.08);
     color: var(--accent-color);
-    .nav-icon .app-icon, .nav-icon { filter: drop-shadow(0 0 5px rgba(0, 229, 255, 0.4)); }
+    .nav-icon .app-icon, .nav-icon { filter: drop-shadow(0 0 5px rgba(var(--accent-rgb), 0.4)); }
   }
 
   &.router-link-active {
-    background: rgba(0, 229, 255, 0.1);
+    background: rgba(var(--accent-rgb), 0.1);
     color: var(--accent-color);
-    .nav-icon .app-icon { filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.5)); }
+    .nav-icon .app-icon { filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.5)); }
   }
 }
 
@@ -261,7 +261,7 @@ onBeforeUnmount(() => {
 .sidebar .nav-item:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--accent-color);
-  background: rgba(0, 229, 255, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-color);
 }
 
@@ -274,7 +274,7 @@ onBeforeUnmount(() => {
 .tooltip {
   position: fixed;
   background: rgba(15,20,32,0.95);
-  border: 1px solid rgba(0,229,255,0.2);
+  border: 1px solid rgba(var(--accent-rgb),0.2);
   color: var(--text-color);
   padding: 5px 10px;
   border-radius: 7px;

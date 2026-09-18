@@ -72,7 +72,7 @@
     box-shadow: var(--neon-glow);
 
     &:hover {
-      background: rgba(0,229,255,0.15);
+      background: rgba(var(--accent-rgb),0.15);
       color: var(--accent-light);
       box-shadow: var(--neon-glow-hover);
     }

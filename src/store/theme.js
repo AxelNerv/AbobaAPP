@@ -1,159 +1,109 @@
 import { defineStore } from 'pinia'
 
+/**
+ * Оформление: цвет акцента (обводка кнопок, постеров, подсветка фокуса)
+ * и фон страницы. Весь интерфейс берёт цвет из --accent-color и
+ * --accent-rgb, поэтому достаточно переписать эти переменные.
+ */
+export const ACCENT_PRESETS = [
+  { id: 'cyan', name: 'Бирюзовый', value: '#00e5ff', hover: '#00b0ff', light: '#6ff9ff', dark: '#0091ea' },
+  { id: 'violet', name: 'Фиолетовый', value: '#b388ff', hover: '#9d6bff', light: '#d1b8ff', dark: '#7c4dff' },
+  { id: 'green', name: 'Зелёный', value: '#00e676', hover: '#00c853', light: '#69f0ae', dark: '#00a152' },
+  { id: 'amber', name: 'Янтарный', value: '#ffb300', hover: '#ff8f00', light: '#ffd54f', dark: '#ff6f00' }
+]
+
+export const BACKGROUNDS = [
+  { id: 'glow', name: 'Сияние' },
+  { id: 'accent', name: 'В цвет акцента' },
+  { id: 'poster', name: 'Постер фильма' },
+  { id: 'plain', name: 'Тёмный' }
+]
+
+const DEFAULT_CUSTOM = '#ff4081'
+
 const createNoopStorage = () => ({
   getItem: () => null,
   setItem: () => {},
   removeItem: () => {}
 })
 
+export const hexToRgb = (hex) => {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || ''))
+  return match ? match.slice(1).map((part) => parseInt(part, 16)) : null
+}
+
+const toHex = (rgb) =>
+  `#${rgb.map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`
+
+// Светлее/темнее — смешиванием с белым/чёрным, чтобы не уходить в другой оттенок.
+const mix = (rgb, target, amount) => rgb.map((c) => c + (target - c) * amount)
+
+/** Палитра для произвольного цвета в том же виде, что и у готовых. */
+export const paletteFor = (hex) => {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return ACCENT_PRESETS[0]
+  return {
+    id: 'custom',
+    name: 'Свой',
+    value: toHex(rgb),
+    hover: toHex(mix(rgb, 0, 0.18)),
+    light: toHex(mix(rgb, 255, 0.4)),
+    dark: toHex(mix(rgb, 0, 0.35))
+  }
+}
+
 export const useThemeStore = defineStore('theme', {
   state: () => ({
-    accentColor: '#9d4edd',
-    customColors: [],
-    accentColors: [
-      { name: 'Material Green', value: '#4caf50', hover: '#45a049' },
-      { name: 'Classic Purple', value: '#6c5ce7', hover: '#5a4fcf' },
-      { name: 'Cherry Lacquer', value: '#c41e3a', hover: '#a51e2f' },
-      { name: 'Retro Blue', value: '#2196f3', hover: '#1976d2' },
-      { name: 'Neon Orange', value: '#ff5722', hover: '#e64a19' },
-      { name: 'Future Dusk', value: '#3f51b5', hover: '#303f9f' },
-      { name: 'Deep Red', value: '#d32f2f', hover: '#c62828' },
-      { name: 'Ocean Blue', value: '#0277bd', hover: '#01579b' },
-      { name: 'Brown Slate', value: '#795548', hover: '#5d4037' },
-      { name: 'Sky Blue', value: '#03a9f4', hover: '#0288d1' },
-      { name: 'Teal Green', value: '#009688', hover: '#00796b' },
-      { name: 'Digital Mint', value: '#26a69a', hover: '#00695c' },
-      { name: 'Coral Red', value: '#f44336', hover: '#d32f2f' },
-      { name: 'Electric Cyan', value: '#00bcd4', hover: '#0097a7' },
-      { name: 'Warm Orange', value: '#ff9800', hover: '#f57c00' },
-      { name: 'Forest Green', value: '#388e3c', hover: '#2e7d32' },
-      { name: 'Amber Gold', value: '#ffc107', hover: '#ffb300' },
-      { name: 'Deep Purple', value: '#7b1fa2', hover: '#6a1b9a' },
-      { name: 'Indigo Blue', value: '#3949ab', hover: '#303f9f' },
-      { name: 'Pink Rose', value: '#e91e63', hover: '#c2185b' },
-      { name: 'Lime Green', value: '#8bc34a', hover: '#689f38' },
-      { name: 'Dark Gray', value: '#424242', hover: '#212121' },
-      { name: 'Violet Purple', value: '#9c27b0', hover: '#7b1fa2' }
-    ]
+    accent: 'cyan',
+    customColor: DEFAULT_CUSTOM,
+    background: 'glow'
   }),
 
   getters: {
-    allColors: (state) => [...state.accentColors, ...state.customColors],
-
-    currentAccentColor: (state) => {
-      const allColors = [...state.accentColors, ...state.customColors]
-      const color = allColors.find((c) => c.value === state.accentColor)
-      return color || state.accentColors[0]
-    },
-
-    accentHoverColor: (state) => {
-      const allColors = [...state.accentColors, ...state.customColors]
-      const color = allColors.find((c) => c.value === state.accentColor)
-      return color?.hover || '#5a4fcf'
-    }
+    palette: (state) =>
+      state.accent === 'custom'
+        ? paletteFor(state.customColor)
+        : ACCENT_PRESETS.find((preset) => preset.id === state.accent) || ACCENT_PRESETS[0]
   },
 
   actions: {
-    setAccentColor(color) {
-      this.accentColor = color
-      this.updateCSSVariables()
+    setAccent(id) {
+      this.accent = id === 'custom' || ACCENT_PRESETS.some((preset) => preset.id === id) ? id : 'cyan'
+      this.apply()
     },
 
-    addCustomColor(colorValue) {
-      const existsInPredefined = this.accentColors.some((c) => c.value === colorValue)
-      const existsInCustom = this.customColors.some((c) => c.value === colorValue)
-
-      if (!existsInPredefined && !existsInCustom) {
-        const hoverColor = this.generateHoverColor(colorValue)
-        this.customColors.push({
-          name: 'Custom Color',
-          value: colorValue,
-          hover: hoverColor,
-          isCustom: true
-        })
-      }
+    setCustomColor(hex) {
+      if (!hexToRgb(hex)) return
+      this.customColor = hex.toLowerCase()
+      this.accent = 'custom'
+      this.apply()
     },
 
-    removeCustomColor(colorValue) {
-      this.customColors = this.customColors.filter((c) => c.value !== colorValue)
-      if (this.accentColor === colorValue) {
-        this.setAccentColor(this.accentColors[0].value)
-      }
+    setBackground(id) {
+      this.background = BACKGROUNDS.some((item) => item.id === id) ? id : 'glow'
+      this.apply()
     },
 
-    generateHoverColor(hex) {
-      const rgb = this.hexToRgb(hex)
-      if (!rgb) return hex
-
-      const factor = 0.8
-      const r = Math.max(0, Math.round(rgb.r * factor))
-      const g = Math.max(0, Math.round(rgb.g * factor))
-      const b = Math.max(0, Math.round(rgb.b * factor))
-
-      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-    },
-
-    updateCSSVariables() {
+    apply() {
       if (typeof document === 'undefined') return
-
       const root = document.documentElement
-      const currentColor = this.currentAccentColor
-
-      root.style.setProperty('--accent-color', currentColor.value)
-      root.style.setProperty('--accent-hover', currentColor.hover)
-
-      const lighterShade = this.lightenColor(currentColor.value, 20)
-      const darkerShade = this.darkenColor(currentColor.value, 20)
-
-      root.style.setProperty('--accent-light', lighterShade)
-      root.style.setProperty('--accent-dark', darkerShade)
-      root.style.setProperty('--accent-transparent', `${currentColor.value}30`)
-      root.style.setProperty('--accent-semi-transparent', `${currentColor.value}80`)
-    },
-
-    hexToRgb(hex) {
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-      return result
-        ? {
-            r: parseInt(result[1], 16),
-            g: parseInt(result[2], 16),
-            b: parseInt(result[3], 16)
-          }
-        : null
-    },
-
-    lightenColor(hex, percent) {
-      const rgb = this.hexToRgb(hex)
-      if (!rgb) return hex
-
-      const factor = 1 + percent / 100
-      const r = Math.min(255, Math.round(rgb.r * factor))
-      const g = Math.min(255, Math.round(rgb.g * factor))
-      const b = Math.min(255, Math.round(rgb.b * factor))
-
-      return `rgb(${r}, ${g}, ${b})`
-    },
-
-    darkenColor(hex, percent) {
-      const rgb = this.hexToRgb(hex)
-      if (!rgb) return hex
-
-      const factor = 1 - percent / 100
-      const r = Math.max(0, Math.round(rgb.r * factor))
-      const g = Math.max(0, Math.round(rgb.g * factor))
-      const b = Math.max(0, Math.round(rgb.b * factor))
-
-      return `rgb(${r}, ${g}, ${b})`
+      const palette = this.palette
+      root.style.setProperty('--accent-rgb', hexToRgb(palette.value).join(', '))
+      root.style.setProperty('--accent-color', palette.value)
+      root.style.setProperty('--accent-hover', palette.hover)
+      root.style.setProperty('--accent-light', palette.light)
+      root.style.setProperty('--accent-dark', palette.dark)
+      root.dataset.bg = this.background
     },
 
     initTheme() {
-      this.updateCSSVariables()
+      this.apply()
     }
   },
 
   persist: {
-    key: 'theme-settings-aboba-1',
+    key: 'aboba-theme',
     storage: typeof window !== 'undefined' ? window.localStorage : createNoopStorage(),
-    paths: ['accentColor', 'customColors']
+    paths: ['accent', 'customColor', 'background']
   }
 })

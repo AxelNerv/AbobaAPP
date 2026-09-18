@@ -51,9 +51,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   display: flex;
   flex-direction: column;
   background: rgba(10, 12, 24, 0.97);
-  border: 1px solid rgba(0, 229, 255, 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(0, 229, 255, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(var(--accent-rgb), 0.08);
 }
 
 .settings-modal__scroll {
@@ -80,7 +80,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 }
 
 .settings-modal__close:hover {
-  background: rgba(0, 229, 255, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   color: #fff;
 }
 

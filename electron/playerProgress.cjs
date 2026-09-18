@@ -105,8 +105,38 @@ const READ_SCRIPT = `(() => {
   return { host: location.host, path: location.pathname, search: location.search, entries: out }
 })()`
 
-const writeScript = (entries) => `(() => {
+/**
+ * Где остановился: время и длительность серии. Только числа — это уходит
+ * внутрь чужой страницы.
+ */
+const cleanResume = (resume) => {
+  const time = Number(resume?.time)
+  const duration = Number(resume?.duration)
+  if (!Number.isFinite(time) || time < 30) return null
+  return { time, duration: Number.isFinite(duration) && duration > 0 ? duration : 0 }
+}
+
+const writeScript = (entries, resume) => `(() => {
   const entries = ${JSON.stringify(entries)}
+  const resume = ${JSON.stringify(resume || null)}
+  // TURBO показывает сохранённое время, но при нажатии play всё равно
+  // стартует с нуля. Поэтому при первом запуске видео с начала перематываем
+  // сами — если это та же серия (длительность совпадает) и она не досмотрена.
+  if (resume && !window.__abobaResumeHook) {
+    window.__abobaResumeHook = true
+    let done = false
+    document.addEventListener('playing', (event) => {
+      const video = event.target
+      if (done || !(video instanceof HTMLMediaElement)) return
+      done = true
+      const duration = video.duration
+      if (video.currentTime > 5) return
+      if (resume.duration && Number.isFinite(duration) && Math.abs(duration - resume.duration) > 10) return
+      const length = Number.isFinite(duration) ? duration : resume.duration
+      if (length && resume.time > length - 90) return
+      try { video.currentTime = resume.time } catch (e) {}
+    }, true)
+  }
   // Позиция Playerjs заканчивается временем сохранения: «…--1789395771954».
   // Старую позицию поверх более свежей, сохранённой на этом компьютере, не кладём.
   const savedAt = (value) => Number((/--([0-9]{10,})$/.exec(value || '') || [])[1] || 0)
@@ -202,7 +232,7 @@ const normalizeFrames = (input, src) => {
 const createRestorer = (webContents) => {
   const pending = new Map()
 
-  const write = (frame, entries) => frame.executeJavaScript(writeScript(entries)).catch(() => 0)
+  const write = (frame, entries, resume) => frame.executeJavaScript(writeScript(entries, resume)).catch(() => 0)
 
   webContents.on('did-frame-navigate', (_event, url, _code, _text, isMainFrame, processId, routingId) => {
     if (isMainFrame || isLocalUrl(url)) return
@@ -212,23 +242,24 @@ const createRestorer = (webContents) => {
     pending.delete(family)
     if (Date.now() > waiting.expires) return
     const frame = webFrameMain.fromId(processId, routingId)
-    if (frame) write(frame, waiting.entries)
+    if (frame) write(frame, waiting.entries, waiting.resume)
   })
 
-  return (input, src) => {
+  return (input, src, resumeInput) => {
     const byFamily = normalizeFrames(input, src)
     if (!Object.keys(byFamily).length) return false
+    const resume = cleanResume(resumeInput)
     const expires = Date.now() + RESTORE_TTL_MS
-    for (const [family, entries] of Object.entries(byFamily)) pending.set(family, { entries, expires })
+    for (const [family, entries] of Object.entries(byFamily)) pending.set(family, { entries, resume, expires })
     const top = findPlayerFrame(webContents, src)
     if (top) {
       for (const frame of playerFrames(top)) {
         const entries = byFamily[familyOf(frame.url)]
-        if (entries) write(frame, entries)
+        if (entries) write(frame, entries, resume)
       }
     }
     return true
   }
 }
 
-module.exports = { sanitizeEntries, normalizeFrames, toStoredKey, toFrameKey, readProgress, createRestorer, familyOf, KEY_RE }
+module.exports = { cleanResume, sanitizeEntries, normalizeFrames, toStoredKey, toFrameKey, readProgress, createRestorer, familyOf, KEY_RE }
