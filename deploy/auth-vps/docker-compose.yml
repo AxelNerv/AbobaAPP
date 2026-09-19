@@ -1,0 +1,64 @@
+# Сервер входа на VPS: бот + подтверждение входа + HTTPS.
+#
+# Отличие от docker-compose.auth.yml (локальный вариант): порт сервера входа
+# наружу не публикуется. Снаружи виден только Caddy, и он пропускает лишь
+# адреса, которые нужны приложению. Остальной бэкенд — прокси к kinobd,
+# списки, админка — на публичном сервере был бы открыт всем.
+name: abobatv-auth
+services:
+  auth:
+    build:
+      context: ./backend
+    environment:
+      STATE_FILE: /app/data/state.json
+      AUTH_MODE: authority
+      ADMIN_KEY: ${ABOBA_ADMIN_KEY:?Set ABOBA_ADMIN_KEY in .env}
+      BOT_USERNAME: ${ABOBA_BOT_USERNAME:-AbobaWathTV_bot}
+    volumes:
+      - auth-data:/app/data
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ext-health',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bot
+    environment:
+      BOT_TOKEN: ${ABOBA_BOT_TOKEN:?Set ABOBA_BOT_TOKEN in .env}
+      ADMIN_KEY: ${ABOBA_ADMIN_KEY:?Set ABOBA_ADMIN_KEY in .env}
+      ADMIN_IDS: ${ABOBA_ADMIN_IDS:-}
+      SERVER_URL: http://auth:8000
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      # 80 — только проверка домена для сертификата; HTTPS — ABOBA_HTTPS_PORT.
+      - "80:80"
+      - "${ABOBA_HTTPS_PORT:-8443}:${ABOBA_HTTPS_PORT:-8443}"
+    environment:
+      AUTH_DOMAIN: ${ABOBA_AUTH_DOMAIN:?Set ABOBA_AUTH_DOMAIN in .env}
+      HTTPS_PORT: ${ABOBA_HTTPS_PORT:-8443}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 128m
+
+volumes:
+  auth-data:
+  caddy-data:
+  caddy-config:
