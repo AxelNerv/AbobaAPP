@@ -235,7 +235,8 @@ const loadTopFromCache = () => {
     const { data, ts } = JSON.parse(raw)
     if (!Array.isArray(data)) return null
     return { data, fresh: Date.now() - ts <= TOP_CACHE_TTL }
-  } catch {
+  } catch (error) {
+    console.warn('[home] кеш топа повреждён:', error?.message || error)
     return null
   }
 }
@@ -243,7 +244,9 @@ const loadTopFromCache = () => {
 const saveTopToCache = (data) => {
   try {
     window.localStorage.setItem(TOP_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }))
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[home] не удалось сохранить кеш топа:', error?.message || error)
+  }
 }
 
 const loadHomeTopMovies = async () => {

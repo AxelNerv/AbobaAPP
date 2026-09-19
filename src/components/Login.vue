@@ -133,7 +133,10 @@ export default {
             // иначе первая страница покажет пустую историю. Не дольше 10 секунд —
             // без сети приложение всё равно работает, синхронизация дойдёт позже.
             await Promise.race([
-              syncNow().catch(() => null),
+              syncNow().catch((error) => {
+                console.warn('[login] первая синхронизация не удалась:', error?.message || error)
+                return null
+              }),
               new Promise((resolve) => setTimeout(resolve, 10000))
             ])
             // Редирект на главную без AuthSuccess (он дёргает чужое API)

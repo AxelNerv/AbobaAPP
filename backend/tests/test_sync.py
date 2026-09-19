@@ -289,6 +289,34 @@ class TwoDevicesTests(unittest.IsolatedAsyncioTestCase):
         await self.sync_now(self.laptop, laptop)
         self.assertEqual(await self.items(self.laptop, laptop, "favorites"), [])
 
+    async def test_client_applies_complete_server_page_before_advancing_cursor(self):
+        laptop = await self.login(self.laptop)
+        desktop = await self.login(self.desktop)
+        imported_progress = {
+            str(index): {
+                "players": {
+                    "test.player": {
+                        "entries": {"position": str(index)},
+                        "summary": {"time": index, "savedAt": BASE + index},
+                    }
+                }
+            }
+            for index in range(600)
+        }
+        status, result = await self.request(
+            "POST", self.laptop + "/import/library", headers=laptop,
+            json={"format": "abobatv-import", "lists": {}, "progress": imported_progress},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["progress"], 600)
+        await self.sync_now(self.laptop, laptop)
+        await self.sync_now(self.desktop, desktop)
+
+        # Запись из хвоста ответа раньше отбрасывалась, а cursor уже продвигался.
+        status, latest = await self.request("GET", self.desktop + "/progress/599", headers=desktop)
+        self.assertEqual(status, 200)
+        self.assertEqual(latest["payload"]["summary"]["time"], 599)
+
     async def test_offline_changes_are_merged_on_login(self):
         # До первого входа с синхронизацией на компьютере уже была история.
         desktop = await self.login(self.desktop)

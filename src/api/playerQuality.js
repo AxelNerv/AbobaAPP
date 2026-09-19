@@ -17,9 +17,17 @@ export const hasAllohaUhd = async (iframeUrl) => {
   const request = fetch(
     `${getBackendUrl()}/player/alloha-uhd?url=${encodeURIComponent(iframeUrl)}`
   )
-    .then((response) => (response.ok ? response.json() : { uhd: false }))
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    })
     .then((data) => data?.uhd === true)
-    .catch(() => false)
+    .catch((error) => {
+      // Не запоминаем сетевую ошибку как постоянное отсутствие 4K.
+      if (cache.get(iframeUrl) === request) cache.delete(iframeUrl)
+      console.warn('[quality] проверка 4K недоступна:', error?.message || error)
+      return false
+    })
 
   cache.set(iframeUrl, request)
   return request

@@ -89,20 +89,28 @@ onMounted(() => {
   window.addEventListener('resize', updateIsMobile)
   document.addEventListener('keydown', handleKeyDown, true)
 
-  // Подтягиваем избранное с сервера при старте приложения.
-  // Если юзер залогинен — сольём серверный список с локальным
-  // (так избранное не пропадает при смене ПК / переустановке Винды).
-  favoritesStore.loadFromServer()
   // Регистрируем глобальный тост для использования из любого места
   window.__toast = (msg, duration = 3500) => {
-    try { globalToastRef.value?.showNotification(msg, duration) } catch { /* ignore */ }
+    try {
+      globalToastRef.value?.showNotification(msg, duration)
+    } catch (error) {
+      console.error('[notifications] не удалось показать уведомление:', error)
+    }
     // Также добавляем в историю уведомлений (колокольчик)
     try {
       if (typeof msg === 'string' && typeof window.__addNotification === 'function') {
         window.__addNotification(msg)
       }
-    } catch { /* ignore */ }
+    } catch (error) {
+      console.error('[notifications] не удалось сохранить уведомление:', error)
+    }
   }
+
+  // Подтягиваем избранное с сервера при старте. Ошибка больше не выглядит
+  // как успешная загрузка пустого списка и не уничтожает локальную копию.
+  void favoritesStore.loadFromServer().catch((error) => {
+    window.__toast(`Избранное не загрузилось: ${error?.message || 'ошибка сервера'}`, 6000)
+  })
 
   // В приложении часть уведомлений приходит из главного процесса.
   // Без этой подписки они терялись по дороге.

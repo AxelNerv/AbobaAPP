@@ -481,7 +481,9 @@ const applyPlayersData = (players) => {
         restoredFromStorage = playersInternal.value.find((p) => p.key === stored)
       }
     }
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[player] не удалось прочитать выбранный плеер:', error?.message || error)
+  }
 
   if (restoredFromStorage) {
     selectedPlayerInternal.value = restoredFromStorage
@@ -876,7 +878,9 @@ const handlePlayerSelect = (player) => {
       const key = `abobatv_selected_player_${props.kpId}`
       window.localStorage.setItem(key, player.key)
     }
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[player] не удалось сохранить выбранный плеер:', error?.message || error)
+  }
 
   iframeLoading.value = true
   playerStore.updatePreferredPlayer(normalizeKey(player.key))
@@ -941,6 +945,20 @@ const progressLabel = computed(() => formatProgress(savedProgress.value?.summary
 let progressTimer = null
 let lastProgressSnapshot = ''
 let progressKpId = ''
+const progressIssueAt = new Map()
+const progressToastShown = new Set()
+
+const reportProgressIssue = (stage, error, notify = false) => {
+  const now = Date.now()
+  if (now - (progressIssueAt.get(stage) || 0) > 60_000) {
+    console.warn(`[progress] ${stage}:`, error?.message || error || 'неизвестная ошибка')
+    progressIssueAt.set(stage, now)
+  }
+  if (notify && !progressToastShown.has(stage)) {
+    progressToastShown.add(stage)
+    window.__toast?.('Не удалось синхронизировать позицию просмотра', 6000)
+  }
+}
 
 const hasAuthToken = () => {
   try {
@@ -958,8 +976,9 @@ const loadSavedProgress = async () => {
   try {
     const { payload } = await getWatchProgress(progressKpId)
     if (payload && typeof payload === 'object' && payload.players) savedProgress.value = payload
-  } catch {
+  } catch (error) {
     // Нет сохранённой позиции или бэкенд занят — смотреть это не мешает.
+    reportProgressIssue('загрузка позиции', error, true)
   }
   if (!progressSupported) return
   // Плеер читает позицию в первые же мгновения загрузки, поэтому готовим её
@@ -982,7 +1001,8 @@ const sendRestore = async (entries, src, summary) => {
   try {
     const resume = summary ? { time: summary.time, duration: summary.duration } : null
     return await window.electronAPI.player.restoreProgress(plain(entries), src, resume)
-  } catch {
+  } catch (error) {
+    reportProgressIssue('восстановление позиции в плеере', error)
     return false
   }
 }
@@ -1003,7 +1023,8 @@ const saveProgress = async () => {
   let snapshot = null
   try {
     snapshot = await window.electronAPI.player.readProgress(src)
-  } catch {
+  } catch (error) {
+    reportProgressIssue('чтение позиции из плеера', error)
     return
   }
   const entries = snapshot?.entries
@@ -1032,8 +1053,9 @@ const saveProgress = async () => {
     await saveWatchProgress(kpId, next)
     lastProgressSnapshot = serialized
     savedProgress.value = next
-  } catch {
+  } catch (error) {
     // Повторим на следующем тике.
+    reportProgressIssue('сохранение позиции', error, true)
   }
 }
 
@@ -1069,30 +1091,39 @@ const cycleAspectRatio = () => {
   setAspectRatio(aspectRatios[nextIndex])
 }
 
-const toggleFavorite = () => {
+const toggleFavorite = async () => {
   const id = kp_id.value
   if (!id) return
   const info = props.movieInfo || {}
   const wasFavorite = isFavorite.value
-  favoritesStore.toggle({
-    kp_id: id,
-    title: info.name_ru || info.title || '',
-    slug: info.slug || '',
-    year: info.year || '',
-    type: info.type || '',
-    poster: info.cover || info.poster || info.poster_url_preview || '',
-    rating_kp: info.rating_kinopoisk || info.rating_kp || '',
-    rating_imdb: info.rating_imdb || ''
-  })
-  notificationRef.value?.showNotification(
-    wasFavorite ? 'Удалено из избранного' : 'Добавлено в избранное'
-  )
+  try {
+    await favoritesStore.toggle({
+      kp_id: id,
+      title: info.name_ru || info.title || '',
+      slug: info.slug || '',
+      year: info.year || '',
+      type: info.type || '',
+      poster: info.cover || info.poster || info.poster_url_preview || '',
+      rating_kp: info.rating_kinopoisk || info.rating_kp || '',
+      rating_imdb: info.rating_imdb || ''
+    })
+    notificationRef.value?.showNotification(
+      wasFavorite ? 'Удалено из избранного' : 'Добавлено в избранное'
+    )
+  } catch (error) {
+    console.error('[favorites] update failed:', error)
+    notificationRef.value?.showNotification('Не удалось изменить избранное')
+  }
 }
 
 const showFavoriteTooltip = computed(() => playerStore.showFavoriteTooltip)
 
 onMounted(async () => {
-  if (progressSupported) progressTimer = setInterval(saveProgress, PROGRESS_SAVE_MS)
+  if (progressSupported) {
+    progressTimer = setInterval(() => {
+      void saveProgress().catch((error) => reportProgressIssue('фоновое сохранение', error, true))
+    }, PROGRESS_SAVE_MS)
+  }
 
   iframeLoading.value = true
   if (isMobile.value) aspectRatio.value = '4:3'
@@ -1103,7 +1134,7 @@ onMounted(async () => {
   // Позиция — локальный запрос на доли секунды; ждём её не дольше полутора
   // секунд, чтобы медленный бэкенд не задерживал сам плеер.
   await Promise.race([
-    loadSavedProgress().catch(() => {}),
+    loadSavedProgress().catch((error) => reportProgressIssue('загрузка позиции', error, true)),
     new Promise((resolve) => setTimeout(resolve, 1500))
   ])
   fetchPlayers()
@@ -1111,7 +1142,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearInterval(progressTimer)
-  saveProgress()
+  void saveProgress().catch((error) => reportProgressIssue('финальное сохранение', error, true))
 
   window.removeEventListener('resize', updateScaleFactor)
   window.removeEventListener('resize', updateTooltipPosition)

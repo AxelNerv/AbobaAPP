@@ -72,7 +72,9 @@ const fetchRandom = async (opts = {}) => {
     const id = response?.kp_id || response?.kinopoisk_id || response?.id
     const hasDesc = response?.description || response?.short_description
     if (id && !hasDesc) {
-      enrichDescription(id, response).catch(() => { /* silent */ })
+      enrichDescription(id, response).catch((error) => {
+        console.warn('[random] описание не загрузилось:', error?.message || error)
+      })
     }
   } catch (error) {
     const { message } = handleApiError(error)
@@ -101,21 +103,24 @@ const enrichDescription = async (id, baseResponse) => {
       randomMovie.value = { ...baseResponse, description: desc }
       return
     }
-  } catch { /* next source */ }
+  } catch (error) {
+    console.warn('[random] основной источник описания недоступен:', error?.message || error)
+  }
 
   // Источник 2 — прямой вызов kinopoiskapiunofficial.tech (публичный endpoint, без ключа)
   try {
     const resp = await fetch(`https://kinopoiskapiunofficial.tech/api/v2.2/films/${id}`, {
       headers: { 'X-API-KEY': import.meta.env.VITE_KP_UNOFFICIAL_KEY || '' }
     })
-    if (resp.ok) {
-      const data = await resp.json()
-      const desc = data?.description || data?.shortDescription
-      if (desc) {
-        randomMovie.value = { ...baseResponse, description: desc }
-      }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    const desc = data?.description || data?.shortDescription
+    if (desc) {
+      randomMovie.value = { ...baseResponse, description: desc }
     }
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[random] резервное описание недоступно:', error?.message || error)
+  }
 }
 
 const initializeNavLinks = () => {

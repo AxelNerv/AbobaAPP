@@ -51,8 +51,27 @@ describe('позиция просмотра из плеера', () => {
   it('Kodik: из общей записи остаётся только текущий сериал', () => {
     const many = {}
     for (let id = 52000; id < 52200; id++) many[id] = { s: 1, e: 15, p: 41, t: 609 }
-    const entries = sanitizeEntries({ 'serial-progress': JSON.stringify(many) }, { host: 'kodikplayer.com', path: '/serial/52142/85362d665e211a35d8fa91fbd9d1e9b6/720p' })
+    const entries = sanitizeEntries(
+      {
+        'serial-progress': JSON.stringify(many),
+        'serial-last-episode': JSON.stringify({ 52142: { s: 1, e: 15 }, 77777: { s: 5, e: 8 } })
+      },
+      { host: 'kodikplayer.com', path: '/serial/52142/85362d665e211a35d8fa91fbd9d1e9b6/720p' }
+    )
     expect(JSON.parse(entries['serial-progress'])).toEqual({ 52142: { s: 1, e: 15, p: 41, t: 609 } })
+    expect(JSON.parse(entries['serial-last-episode'])).toEqual({ 52142: { s: 1, e: 15 } })
+  })
+
+  it('Kodik: не подставляет прогресс другого сериала', () => {
+    const entries = sanitizeEntries(
+      {
+        'serial-progress': '{"111":{"s":2,"e":7,"p":450}}',
+        'serial-last-episode': '{"111":{"s":2,"e":7}}'
+      },
+      { host: 'kodik.info', path: '/serial/222/hash/720p' }
+    )
+
+    expect(entries).toEqual({})
   })
 
   it('старые позиции без разбивки по окнам относятся к домену плеера', () => {

@@ -383,7 +383,11 @@ onMounted(async () => {
     settingsReady.value = !!status.value.settings
   } catch (err) { error.value = err.message }
   finally { busy.value = false }
-  if (authStore.token) getSyncStatus().then((s) => { sync.value = s }).catch(() => {})
+  if (authStore.token) {
+    getSyncStatus()
+      .then((s) => { sync.value = s })
+      .catch((err) => { error.value = `Не удалось проверить синхронизацию: ${err?.message || 'ошибка сети'}` })
+  }
 })
 </script>
 

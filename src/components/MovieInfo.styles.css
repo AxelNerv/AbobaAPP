@@ -274,6 +274,26 @@
   margin-bottom: 8px;
 }
 
+.series-guide-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tvmaze-source {
+  color: var(--accent-color);
+  font-size: 12px;
+  text-decoration: none;
+  border: 1px solid var(--accent-semi-transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.tvmaze-source:hover {
+  background: var(--accent-semi-transparent);
+}
+
 .content-info {
   font-size: 16px;
   line-height: 1.6;

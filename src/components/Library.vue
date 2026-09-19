@@ -274,7 +274,9 @@ const load = async () => {
     .then((state) => {
       syncError.value = state?.enabled && state.error ? `Синхронизация не работает: ${state.error}` : ''
     })
-    .catch(() => {})
+    .catch((error) => {
+      syncError.value = `Не удалось проверить синхронизацию: ${error?.message || 'ошибка сети'}`
+    })
 }
 
 const removeItem = async (item) => {
@@ -284,8 +286,9 @@ const removeItem = async (item) => {
   list.value = before.filter((x) => String(x.kp_id) !== String(item.kp_id))
   try {
     await delFromList(item.kp_id, type)
-  } catch {
+  } catch (error) {
     list.value = before // не удалилось на сервере — возвращаем как было
+    loadError.value = `Не удалось удалить: ${error?.message || 'ошибка сервера'}`
   }
 }
 
@@ -305,6 +308,8 @@ const doClear = async () => {
     await delAllFromList(listTypeFor())
     if (activeTab.value === 'history') history.value = []
     else favorites.value = []
+  } catch (error) {
+    loadError.value = `Не удалось очистить список: ${error?.message || 'ошибка сервера'}`
   } finally {
     clearing.value = false
   }

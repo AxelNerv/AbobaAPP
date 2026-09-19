@@ -43,7 +43,18 @@ const isTelegramWebView = () => {
   return false
 }
 
-const openInBrowser = () => {
+const copyCurrentUrl = async (url) => {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard API недоступен')
+    await navigator.clipboard.writeText(url)
+    alert('Ссылка скопирована — откройте в Safari или Chrome')
+  } catch (error) {
+    console.warn('[telegram] не удалось скопировать ссылку:', error?.message || error)
+    alert(`Откройте ссылку вручную: ${url}`)
+  }
+}
+
+const openInBrowser = async () => {
   // Пытаемся открыть текущий URL в системном браузере.
   // На iOS / Android Telegram это обычно срабатывает: Telegram отдаёт ссылку ОС,
   // та открывает Safari/Chrome.
@@ -52,13 +63,11 @@ const openInBrowser = () => {
   try {
     const opened = window.open(url, '_blank')
     if (!opened) {
-      // Fallback — копируем в буфер
-      navigator.clipboard?.writeText(url)
-      alert('Ссылка скопирована — откройте в Safari или Chrome')
+      await copyCurrentUrl(url)
     }
-  } catch {
-    navigator.clipboard?.writeText(url)
-    alert('Ссылка скопирована — откройте в Safari или Chrome')
+  } catch (error) {
+    console.warn('[telegram] внешний браузер не открылся:', error?.message || error)
+    await copyCurrentUrl(url)
   }
 }
 
@@ -66,7 +75,9 @@ const dismiss = () => {
   show.value = false
   try {
     window.localStorage.setItem(STORAGE_KEY, '1')
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[telegram] не удалось запомнить закрытие баннера:', error?.message || error)
+  }
 }
 
 onMounted(() => {
@@ -74,7 +85,9 @@ onMounted(() => {
   // Если юзер уже закрыл баннер — не показываем
   try {
     if (window.localStorage.getItem(STORAGE_KEY) === '1') return
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[telegram] не удалось прочитать состояние баннера:', error?.message || error)
+  }
   show.value = true
 })
 </script>

@@ -16,6 +16,13 @@ const CACHE_MS = 60_000
 
 let cache = { at: 0, tripped: [] }
 let inFlight = null
+let lastWarningAt = 0
+
+const warnUnavailable = (error) => {
+  if (Date.now() - lastWarningAt < CACHE_MS) return
+  lastWarningAt = Date.now()
+  console.warn('[providers] состояние источников недоступно:', error?.message || error)
+}
 
 const load = async () => {
   const res = await fetch(`${getBackendUrl()}/ext-health`)
@@ -30,7 +37,10 @@ export const getTrippedProviders = async () => {
   if (Date.now() - cache.at < CACHE_MS) return cache.tripped
   if (!inFlight) {
     inFlight = load()
-      .catch(() => cache.tripped) // бэкенд недоступен — считаем всех живыми
+      .catch((error) => {
+        warnUnavailable(error)
+        return cache.tripped // бэкенд недоступен — считаем всех живыми
+      })
       .finally(() => {
         inFlight = null
       })

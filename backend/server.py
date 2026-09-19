@@ -249,6 +249,8 @@ PROXY_TARGETS = {
     # TMDB — стабильный источник описаний/постеров, не подверженный банам,
     # которые мы ловим от rhserv. Используется как «донор» недостающих полей.
     "tmdb": "https://api.themoviedb.org",
+    # TVmaze не требует ключа: статус сериала и даты выхода серий.
+    "tvmaze": "https://api.tvmaze.com",
 }
 
 # Ключ TMDB живёт ТОЛЬКО на сервере. Во фронт его класть нельзя: всё, что с
@@ -263,7 +265,20 @@ PROXY_EXTRA_HEADERS = {
         "Referer": "https://tapeop.dev/",
         "Origin": "https://tapeop.dev",
     },
+    "tvmaze": {
+        "User-Agent": "AbobaTV/0.3.4 (https://github.com/AxelNerv/AbobaAPP)",
+    },
 }
+
+
+def _proxy_base_for(provider: str) -> Optional[str]:
+    base = PROXY_TARGETS.get(provider)
+    # api.tvmaze.com сейчас недоступен напрямую из части домашних сетей.
+    # Клиентское приложение ходит через сервер входа/VPS; authority уже
+    # обращается к TVmaze напрямую и держит общий кеш для всех клиентов.
+    if provider == "tvmaze" and AUTH_MODE == "client" and AUTH_SERVER_URL:
+        return f"{AUTH_SERVER_URL.rstrip('/')}/ext/tvmaze"
+    return base
 
 # TTL кеша по «типу» пути (сек). Топы/обсуждаемое меняются редко — кешируем дольше.
 def _cache_ttl_for(path: str) -> int:
@@ -272,7 +287,8 @@ def _cache_ttl_for(path: str) -> int:
         return 1800       # 30 минут. Топы за 5 минут не меняются, а короткий TTL
                           # означал повторные обращения к источнику каждые 5 мин
                           # с каждой новой страницы → лишний повод для бана.
-    if "kp_info" in p or "search" in p or "imdb" in p or "shiki" in p or p.startswith("3/"):
+    if ("kp_info" in p or "search" in p or "imdb" in p or "shiki" in p or
+            p.startswith("3/") or p.startswith("lookup/shows") or p.startswith("shows/")):
         # p.startswith("3/") — все запросы к TMDB (у него версия в пути: /3/find,
         # /3/search). Описания и постеры там не меняются годами.
         return 3600       # 1 час — справочные данные практически статичны
@@ -280,7 +296,52 @@ def _cache_ttl_for(path: str) -> int:
 
 _proxy_cache: dict = {}          # key -> (expiry_ts, status, content_type, body_bytes)
 _proxy_cache_lock = threading.Lock()
+_proxy_cache_bytes = 0
+PROXY_CACHE_MAX_ENTRIES = 512
+PROXY_CACHE_MAX_BYTES = 32 * 1024 * 1024
+PROXY_CACHE_STALE_TTL = 24 * 60 * 60
 _http_session: Optional[aiohttp.ClientSession] = None
+
+
+def _proxy_cache_get(key: str, allow_stale: bool = False):
+    """LRU-чтение; слишком старые записи сразу освобождают память."""
+    global _proxy_cache_bytes
+    now = time.time()
+    with _proxy_cache_lock:
+        entry = _proxy_cache.get(key)
+        if not entry:
+            return None
+        expiry, _, _, body = entry
+        if expiry + PROXY_CACHE_STALE_TTL <= now:
+            _proxy_cache.pop(key, None)
+            _proxy_cache_bytes -= len(body)
+            return None
+        if expiry <= now and not allow_stale:
+            return None
+        # Обычный dict сохраняет порядок: переносим использованную запись в хвост.
+        _proxy_cache.pop(key)
+        _proxy_cache[key] = entry
+        return entry
+
+
+def _proxy_cache_put(key: str, entry) -> None:
+    """Кеш ограничен и числом ответов, и общим размером их тел."""
+    global _proxy_cache_bytes
+    body = entry[3]
+    if len(body) > PROXY_CACHE_MAX_BYTES:
+        return
+    with _proxy_cache_lock:
+        previous = _proxy_cache.pop(key, None)
+        if previous:
+            _proxy_cache_bytes -= len(previous[3])
+        _proxy_cache[key] = entry
+        _proxy_cache_bytes += len(body)
+        while (_proxy_cache and
+               (len(_proxy_cache) > PROXY_CACHE_MAX_ENTRIES or
+                _proxy_cache_bytes > PROXY_CACHE_MAX_BYTES)):
+            oldest_key = next(iter(_proxy_cache))
+            oldest = _proxy_cache.pop(oldest_key)
+            _proxy_cache_bytes -= len(oldest[3])
 
 # ── Circuit breaker ──────────────────────────────────────────────────────
 # Если источник банит нас (403/429) или недоступен — перестаём к нему ходить
@@ -569,13 +630,15 @@ async def _fetch_kinobd_split(session, base, path, plan, headers, req_timeout):
         if status != 200:
             return status, ctype, content
     bodies = [json.loads(content) for _, _, content in results]
+    if not all(isinstance(body, dict) and isinstance(body.get("data"), list) for body in bodies):
+        raise ValueError("kinobd returned an invalid page")
     merged = kinobd_merge_chunks(plan, bodies)
     return 200, "application/json", json.dumps(merged, ensure_ascii=False).encode("utf-8")
 
 
 @app.api_route("/ext/{provider}/{path:path}", methods=["GET", "POST"])
 async def ext_proxy(provider: str, path: str, request: Request):
-    base = PROXY_TARGETS.get(provider)
+    base = _proxy_base_for(provider)
     if not base:
         raise HTTPException(404, "Unknown provider")
 
@@ -595,8 +658,7 @@ async def ext_proxy(provider: str, path: str, request: Request):
 
     # 1. Отдаём из кеша, если свежий
     if ttl > 0:
-        with _proxy_cache_lock:
-            hit = _proxy_cache.get(cache_key)
+        hit = _proxy_cache_get(cache_key)
         if hit and hit[0] > time.time():
             _, status, ctype, body = hit
             return Response(content=body, status_code=status, media_type=ctype)
@@ -605,8 +667,7 @@ async def ext_proxy(provider: str, path: str, request: Request):
     # к нему вовсе. Отдаём устаревший кеш если есть, иначе быстрый 503 → фронт
     # сам уйдёт на kinobd. Так rhserv не получает запросов и его бан остывает.
     if _is_tripped(provider):
-        with _proxy_cache_lock:
-            stale = _proxy_cache.get(cache_key)
+        stale = _proxy_cache_get(cache_key, allow_stale=True)
         if stale:
             _, s_status, s_ctype, s_body = stale
             return Response(content=s_body, status_code=s_status, media_type=s_ctype)
@@ -653,7 +714,7 @@ async def ext_proxy(provider: str, path: str, request: Request):
             status, ctype, content = await _fetch_upstream(
                 session, method, target, headers, body_bytes, req_timeout
             )
-    except Exception as e:  # noqa: BLE001
+    except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError, ValueError) as e:
         # Источник не ответил: таймаут, обрыв, моргнула сеть.
         # ВАЖНО: здесь источник НЕ выключаем. Отключать имеет смысл только
         # против бана — чтобы дать ему остыть. Сетевая заминка к бану
@@ -662,8 +723,7 @@ async def ext_proxy(provider: str, path: str, request: Request):
         # выключенным, и страница фильма показывала «источники недоступны».
         # Следующий запрос просто попробует снова.
         print(f"[proxy] {provider}: сеть подвела ({type(e).__name__}), не выключаем")
-        with _proxy_cache_lock:
-            stale = _proxy_cache.get(cache_key)
+        stale = _proxy_cache_get(cache_key, allow_stale=True)
         if stale:
             _, status, ctype, body = stale
             return Response(content=body, status_code=status, media_type=ctype)
@@ -681,12 +741,10 @@ async def ext_proxy(provider: str, path: str, request: Request):
 
     # 3. Кешируем только успешные ответы
     if ttl > 0 and status == 200:
-        with _proxy_cache_lock:
-            _proxy_cache[cache_key] = (time.time() + ttl, status, ctype, content)
+        _proxy_cache_put(cache_key, (time.time() + ttl, status, ctype, content))
     # При ошибке — отдадим устаревший кеш, если он есть (чтобы пережить rate-limit)
     elif status != 200 and ttl > 0:
-        with _proxy_cache_lock:
-            stale = _proxy_cache.get(cache_key)
+        stale = _proxy_cache_get(cache_key, allow_stale=True)
         if stale:
             _, s_status, s_ctype, s_body = stale
             return Response(content=s_body, status_code=s_status, media_type=s_ctype)
@@ -1128,17 +1186,13 @@ async def create_broadcast(req: CreateBroadcastRequest,
 
 @app.get("/broadcasts/list")
 async def list_broadcasts(since: Optional[str] = None, limit: int = 20):
+    limit = max(1, min(limit, 100))
     with db() as conn:
         if since:
-            try:
-                rows = conn.execute("""
-                    SELECT * FROM broadcasts
-                    WHERE created_at > ? ORDER BY created_at DESC LIMIT ?
-                """, (since, limit)).fetchall()
-            except Exception:
-                rows = conn.execute("""
-                    SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?
-                """, (limit,)).fetchall()
+            rows = conn.execute("""
+                SELECT * FROM broadcasts
+                WHERE created_at > ? ORDER BY created_at DESC LIMIT ?
+            """, (since, limit)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT ?
@@ -1180,17 +1234,25 @@ async def list_get_all(list_type: str,
     tg_id = auth_get_tg_id(authorization)
     with db() as conn:
         rows = conn.execute("""
-            SELECT movie_json FROM user_lists
+            SELECT kp_id, movie_json FROM user_lists
             WHERE tg_id=? AND list_type=? AND deleted=0
             ORDER BY added_at DESC
         """, (tg_id, list_type)).fetchall()
     items = []
+    damaged = 0
     for r in rows:
         try:
-            items.append(json.loads(r["movie_json"]))
-        except Exception:
-            pass
-    return {"items": items}
+            item = json.loads(r["movie_json"])
+            if not isinstance(item, dict):
+                raise ValueError("movie_json is not an object")
+            items.append(item)
+        except (json.JSONDecodeError, TypeError, ValueError) as error:
+            damaged += 1
+            print(f"[library] повреждена запись {list_type}/{r['kp_id']}: {error}")
+            # Не скрываем фильм целиком: пользователь хотя бы увидит запись и
+            # сможет удалить/добавить её заново.
+            items.append({"kp_id": r["kp_id"], "title": "Повреждённая запись"})
+    return {"items": items, "damaged": damaged}
 
 
 @app.put("/list/{list_type}/{item_id}")
@@ -1356,13 +1418,17 @@ async def sync_user(tg_id: int) -> dict:
                 with db() as conn:
                     outgoing = sync.dirty_items(conn, tg_id)
                 data = await _remote_sync_call(token, {"cursor": cursor, "items": outgoing})
-                incoming = sync.validate_items(data["items"][:sync.MAX_ITEMS_PER_REQUEST])
+                # Сервер может вернуть больше записей, чем клиент отправляет за один
+                # обмен. Проверяем весь ответ до сохранения cursor: обрезка здесь
+                # навсегда пропускала хвост страницы синхронизации.
+                incoming = sync.validate_items(
+                    data["items"], max_items=sync.MAX_CHANGES_PER_RESPONSE)
                 with db() as conn:
                     sync.clear_dirty(conn, tg_id, outgoing)
                     sync.apply_items(conn, tg_id, incoming, server=False)
                     cursor = max(cursor, data["cursor"])
                     conn.execute("UPDATE sync_accounts SET cursor=? WHERE tg_id=?", (cursor, tg_id))
-                more = bool(data.get("more")) or len(data["items"]) > len(incoming)
+                more = bool(data.get("more"))
                 if not more and len(outgoing) < sync.MAX_ITEMS_PER_REQUEST:
                     break
         except SyncAuthLost:

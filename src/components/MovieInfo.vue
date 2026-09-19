@@ -311,6 +311,25 @@
                   <strong>{{ isSeries ? 'Длительность серии:' : 'Продолжительность:' }}</strong>
                   {{ formatTime(movieInfo.film_length) }}
                 </li>
+                <li v-if="seriesGuide" class="series-guide-status">
+                  <strong>Статус сериала:</strong>
+                  <span>{{ seriesGuide.statusLabel || 'Неизвестен' }}</span>
+                  <a
+                    v-if="seriesGuide.sourceUrl"
+                    :href="seriesGuide.sourceUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="tvmaze-source"
+                  >TVmaze</a>
+                </li>
+                <li v-if="seriesGuide?.nextEpisode">
+                  <strong>Следующая серия:</strong>
+                  {{ formatEpisode(seriesGuide.nextEpisode) }}
+                </li>
+                <li v-else-if="seriesGuide?.previousEpisode">
+                  <strong>Последняя серия:</strong>
+                  {{ formatEpisode(seriesGuide.previousEpisode) }}
+                </li>
                 <li
                   v-if="movieInfo.rating_mpaa || movieInfo.rating_age_limits"
                   class="rating-boxes"
@@ -493,6 +512,7 @@ import { handleApiError } from '@/constants'
 import { addToList } from '@/api/user'
 import { MovieList } from '@/components/MovieList/'
 import { getRelated } from '@/api/related'
+import { getSeriesGuide } from '@/api/tvmaze'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'
 import { TYPES_ENUM, USER_LIST_TYPES_ENUM } from '@/constants'
@@ -511,6 +531,7 @@ import { useTrailerStore } from '@/store/trailer'
 import { getRatingColor } from '@/utils/ratingUtils'
 import { deviceImage } from '@/utils/mediaUtils'
 import { buildMovieSeo, getMovieSeoEntry, getMovieSeoPath, getMovieSeoSlug } from '@/utils/movieSeo'
+import { createLatestRequestGuard } from '@/utils/latestRequest'
 
 const mainStore = useMainStore()
 const authStore = useAuthStore()
@@ -524,19 +545,24 @@ const isFav = computed(() => {
 })
 
 
-const toggleFavorite = () => {
+const toggleFavorite = async () => {
   const id = movieInfo.value?.kinopoisk_id || movieInfo.value?.kp_id || kp_id.value
   if (!id) return
-  favoritesStore.toggle({
-    kp_id: id,
-    title: movieInfo.value?.name_ru || movieInfo.value?.title || '',
-    slug: movieInfo.value?.slug || '',
-    year: movieInfo.value?.year || '',
-    type: movieInfo.value?.type || '',
-    poster: movieInfo.value?.cover || movieInfo.value?.poster || movieInfo.value?.poster_url_preview || '',
-    rating_kp: movieInfo.value?.rating_kinopoisk || movieInfo.value?.rating_kp || '',
-    rating_imdb: movieInfo.value?.rating_imdb || ''
-  })
+  try {
+    await favoritesStore.toggle({
+      kp_id: id,
+      title: movieInfo.value?.name_ru || movieInfo.value?.title || '',
+      slug: movieInfo.value?.slug || '',
+      year: movieInfo.value?.year || '',
+      type: movieInfo.value?.type || '',
+      poster: movieInfo.value?.cover || movieInfo.value?.poster || movieInfo.value?.poster_url_preview || '',
+      rating_kp: movieInfo.value?.rating_kinopoisk || movieInfo.value?.rating_kp || '',
+      rating_imdb: movieInfo.value?.rating_imdb || ''
+    })
+  } catch (error) {
+    console.error('[favorites] update failed:', error)
+    notificationRef.value?.showNotification('Не удалось изменить избранное')
+  }
 }
 
 const goToPrevRandom = () => {
@@ -723,6 +749,26 @@ const formatTime = (minutes) => {
   return `${hours} ч. ${mins} мин.`
 }
 
+const formatEpisodeDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return ''
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC'
+  }).format(new Date(`${value}T00:00:00Z`))
+}
+
+const formatEpisode = (episode) => {
+  const number = [
+    episode?.season ? `сезон ${episode.season}` : '',
+    episode?.number ? `серия ${episode.number}` : ''
+  ].filter(Boolean).join(', ')
+  const date = formatEpisodeDate(episode?.airdate)
+  const name = episode?.name ? `«${episode.name}»` : ''
+  return [number, name, date].filter(Boolean).join(' · ')
+}
+
 // У сериала kinobd отдаёт длительность одной серии, а не всего сериала.
 const isSeries = computed(() =>
   /serial|series|tv_series/i.test(String(movieInfo.value?.type || movieInfo.value?.raw_data?.type || ''))
@@ -765,21 +811,40 @@ const setPagePoster = (url) => {
   }
 }
 
+const movieInfoRequests = createLatestRequestGuard()
+const seriesGuide = ref(null)
+let seriesGuideRequest = 0
+
+const loadSeriesGuide = async (movie, requestedKpId) => {
+  const request = ++seriesGuideRequest
+  seriesGuide.value = null
+  const guide = await getSeriesGuide(movie)
+  if (request !== seriesGuideRequest || String(kp_id.value || '') !== String(requestedKpId)) return
+  seriesGuide.value = guide
+}
+
 const fetchMovieInfo = async (updateHistory = true) => {
+  const request = movieInfoRequests.begin()
+  const requestedKpId = String(kp_id.value || '')
+  const isCurrentRequest = () =>
+    movieInfoRequests.isCurrent(request) && String(kp_id.value || '') === requestedKpId
+  infoLoading.value = true
+
   try {
-    const response = await getKpInfo(kp_id.value, authStore.token)
+    const response = await getKpInfo(requestedKpId, authStore.token)
+
+    if (!isCurrentRequest()) return
 
     if (Array.isArray(response) && response.length === 0) {
       throw new Error('Данные не найдены. Пожалуйста, повторите поиск.')
     }
 
-    movieInfo.value = response
-
     movieInfo.value = {
-      ...movieInfo.value,
-      title: movieInfo.value.name_ru || movieInfo.value.name_en || movieInfo.value.name_original,
-      kinopoisk_id: kp_id.value
+      ...response,
+      title: response?.name_ru || response?.name_en || response?.name_original || response?.title,
+      kinopoisk_id: requestedKpId
     }
+    void loadSeriesGuide(movieInfo.value, requestedKpId)
 
     navbarStore.setHeaderContent({
       text: movieInfo.value.title,
@@ -788,10 +853,16 @@ const fetchMovieInfo = async (updateHistory = true) => {
 
     await syncCanonicalMovieRoute()
 
+    if (!isCurrentRequest()) return
+
     const movieToSave = {
-      kp_id: kp_id.value,
-      title: movieInfo.value?.name_ru || movieInfo.value?.name_en || movieInfo.value?.name_original,
-      slug: getMovieSeoSlug(movieInfo.value, kp_id.value),
+      kp_id: requestedKpId,
+      title:
+        movieInfo.value?.name_ru ||
+        movieInfo.value?.name_en ||
+        movieInfo.value?.name_original ||
+        movieInfo.value?.title,
+      slug: getMovieSeoSlug(movieInfo.value, requestedKpId),
       poster:
         movieInfo.value?.poster_url ||
         movieInfo.value?.cover_url ||
@@ -823,6 +894,8 @@ const fetchMovieInfo = async (updateHistory = true) => {
       }
     }
   } catch (error) {
+    if (!isCurrentRequest()) return
+
     console.error('Ошибка при загрузке информации о фильмах:', error)
 
     // Описание и плееры грузятся разными запросами. Если описание не
@@ -848,6 +921,8 @@ const fetchMovieInfo = async (updateHistory = true) => {
     const { message, code } = handleApiError(error)
     errorMessage.value = message
     errorCode.value = code
+  } finally {
+    if (isCurrentRequest()) infoLoading.value = false
   }
 }
 
@@ -906,7 +981,6 @@ onMounted(async () => {
   moviePlayerComponent.value = markRaw((await import('@/components/PlayerComponent.vue')).default)
   loadRelated(kp_id.value)
   await fetchMovieInfo()
-  infoLoading.value = false
   document.addEventListener('keydown', onKeyDown)
   window.addEventListener('resize', onResize)
   setTimeout(updateItemsPerRow, 100)
@@ -928,6 +1002,8 @@ const syncRandomState = () => {
 }
 
 onUnmounted(async () => {
+  movieInfoRequests.invalidate()
+  seriesGuideRequest += 1
   navbarStore.clearHeaderContent()
   setPagePoster(null)
   document.removeEventListener('keydown', onKeyDown)
@@ -939,12 +1015,13 @@ watch(
   async (newKpId) => {
     if (newKpId && newKpId !== kp_id.value) {
       navbarStore.clearHeaderContent()
+      seriesGuideRequest += 1
+      seriesGuide.value = null
       kp_id.value = newKpId
       activeTrailerIndex.value = null
       syncRandomState()
       loadRelated(newKpId)
       await fetchMovieInfo()
-      infoLoading.value = false
     }
   },
   { immediate: true }

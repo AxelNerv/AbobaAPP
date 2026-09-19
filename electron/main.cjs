@@ -328,7 +328,8 @@ const handle = (channel, callback) => ipcMain.handle(channel, async (event, ...a
 handle('player:read-progress', async (src) => {
   try {
     return await playerProgress.readProgress(mainWindow.webContents, String(src || ''))
-  } catch {
+  } catch (error) {
+    console.warn('[progress] не удалось прочитать состояние плеера:', error?.message || error)
     return null
   }
 })

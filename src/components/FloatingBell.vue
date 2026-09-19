@@ -101,28 +101,34 @@ function loadNotifications() {
   try {
     const raw = window.localStorage.getItem('abobatv_notifications')
     return raw ? JSON.parse(raw) : []
-  } catch {
+  } catch (error) {
+    console.warn('[notifications] локальная история повреждена:', error?.message || error)
     return []
   }
 }
 function saveNotifications() {
   try {
     window.localStorage.setItem('abobatv_notifications', JSON.stringify(notifications.value))
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[notifications] не удалось сохранить историю:', error?.message || error)
+  }
 }
 function loadReadIds() {
   if (typeof window === 'undefined') return []
   try {
     const raw = window.localStorage.getItem('abobatv_notif_read')
     return raw ? JSON.parse(raw) : []
-  } catch {
+  } catch (error) {
+    console.warn('[notifications] список прочитанных повреждён:', error?.message || error)
     return []
   }
 }
 function saveReadIds() {
   try {
     window.localStorage.setItem('abobatv_notif_read', JSON.stringify(readIds.value))
-  } catch { /* ignore */ }
+  } catch (error) {
+    console.warn('[notifications] не удалось сохранить прочитанное:', error?.message || error)
+  }
 }
 
 const addNotification = (text) => {
@@ -201,6 +207,7 @@ let stopUpdateWatch = null
 // ───────── Подгружаем глобальные уведомления от админа ─────────
 let broadcastsPollId = null
 const BROADCASTS_SEEN_KEY = 'abobatv_broadcasts_last_seen'
+let lastBroadcastErrorAt = 0
 
 const fetchBroadcasts = async () => {
   try {
@@ -210,7 +217,7 @@ const fetchBroadcasts = async () => {
       ? `${getBackendUrl()}/broadcasts/list?since=${encodeURIComponent(lastSeen)}`
       : `${getBackendUrl()}/broadcasts/list?limit=5`
     const resp = await fetch(url)
-    if (!resp.ok) return
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     const items = data.broadcasts || []
     // Добавляем новые как уведомления
@@ -230,7 +237,13 @@ const fetchBroadcasts = async () => {
       window.localStorage.setItem(BROADCASTS_SEEN_KEY, maxSeen)
     }
     saveNotifications()
-  } catch { /* ignore */ }
+  } catch (error) {
+    // Опрос идёт каждые 30 секунд: пишем в консоль не чаще раза в 5 минут.
+    if (Date.now() - lastBroadcastErrorAt > 5 * 60 * 1000) {
+      lastBroadcastErrorAt = Date.now()
+      console.warn('[broadcasts] уведомления недоступны:', error?.message || error)
+    }
+  }
 }
 
 onMounted(() => {

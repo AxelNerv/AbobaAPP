@@ -24,6 +24,14 @@ const MAX_KEYS = 40
 const MAX_FRAMES = 6
 const HOST_TOKEN = '{host}'
 const RESTORE_TTL_MS = 60 * 1000
+const warningTimes = new Map()
+
+const warnThrottled = (key, message, error) => {
+  const now = Date.now()
+  if (now - (warningTimes.get(key) || 0) < 60 * 1000) return
+  warningTimes.set(key, now)
+  console.warn(`[progress] ${message}:`, error?.message || error || 'неизвестная ошибка')
+}
 
 const isLocalUrl = (url) => {
   try {
@@ -67,9 +75,11 @@ const trimKodikProgress = (value, path) => {
   if (!id) return value
   try {
     const data = JSON.parse(value)
-    return data && typeof data === 'object' && data[id] ? JSON.stringify({ [id]: data[id] }) : value
+    return data && typeof data === 'object' && Object.hasOwn(data, id)
+      ? JSON.stringify({ [id]: data[id] })
+      : null
   } catch {
-    return value
+    return null
   }
 }
 
@@ -82,7 +92,10 @@ const sanitizeEntries = (raw, { host = '', path = '', search = '' } = {}) => {
   const result = {}
   if (!raw || typeof raw !== 'object') return result
   for (const [key, original] of Object.entries(raw)) {
-    const value = key === 'serial-progress' && typeof original === 'string' ? trimKodikProgress(original, path) : original
+    const isKodikProgress = key === 'serial-progress' || key === 'serial-last-episode'
+    const value = isKodikProgress && typeof original === 'string'
+      ? trimKodikProgress(original, path)
+      : original
     if (Object.keys(result).length >= MAX_KEYS) break
     if (typeof key !== 'string' || typeof value !== 'string') continue
     if (!KEY_RE.test(key) || key.length > 512 || value.length > MAX_VALUE_LENGTH) continue
@@ -96,13 +109,14 @@ const sanitizeEntries = (raw, { host = '', path = '', search = '' } = {}) => {
 
 const READ_SCRIPT = `(() => {
   const out = {}
+  let error = ''
   try {
     for (let i = 0; i < localStorage.length && i < 2000; i++) {
       const key = localStorage.key(i)
       out[key] = localStorage.getItem(key)
     }
-  } catch (e) {}
-  return { host: location.host, path: location.pathname, search: location.search, entries: out }
+  } catch (e) { error = String(e && e.message || e) }
+  return { host: location.host, path: location.pathname, search: location.search, entries: out, error }
 })()`
 
 /**
@@ -134,13 +148,14 @@ const writeScript = (entries, resume) => `(() => {
       if (resume.duration && Number.isFinite(duration) && Math.abs(duration - resume.duration) > 10) return
       const length = Number.isFinite(duration) ? duration : resume.duration
       if (length && resume.time > length - 90) return
-      try { video.currentTime = resume.time } catch (e) {}
+      try { video.currentTime = resume.time } catch (e) { console.warn('[AbobaTV] resume seek failed', e) }
     }, true)
   }
   // Позиция Playerjs заканчивается временем сохранения: «…--1789395771954».
   // Старую позицию поверх более свежей, сохранённой на этом компьютере, не кладём.
   const savedAt = (value) => Number((/--([0-9]{10,})$/.exec(value || '') || [])[1] || 0)
   let written = 0
+  let error = ''
   try {
     for (const [key, value] of Object.entries(entries)) {
       const frameKey = key.split(${JSON.stringify(HOST_TOKEN)}).join(location.host)
@@ -151,8 +166,8 @@ const writeScript = (entries, resume) => `(() => {
         written++
       }
     }
-  } catch (e) {}
-  return written
+  } catch (e) { error = String(e && e.message || e) }
+  return { written, error }
 })()`
 
 /** Фрейм плеера: не главный и не наш. Если знаем адрес iframe — ищем по домену. */
@@ -188,10 +203,12 @@ const readProgress = async (webContents, src) => {
     let snapshot = null
     try {
       snapshot = await withTimeout(frame.executeJavaScript(READ_SCRIPT), 3000)
-    } catch {
+    } catch (error) {
+      warnThrottled(`read:${familyOf(frame.url)}`, 'не удалось прочитать iframe', error)
       continue
     }
     if (!snapshot || typeof snapshot.host !== 'string') continue
+    if (snapshot.error) warnThrottled(`storage:${snapshot.host}`, 'localStorage плеера недоступен', snapshot.error)
     const clean = sanitizeEntries(snapshot.entries, {
       host: snapshot.host,
       path: String(snapshot.path || ''),
@@ -232,7 +249,15 @@ const normalizeFrames = (input, src) => {
 const createRestorer = (webContents) => {
   const pending = new Map()
 
-  const write = (frame, entries, resume) => frame.executeJavaScript(writeScript(entries, resume)).catch(() => 0)
+  const write = (frame, entries, resume) => frame.executeJavaScript(writeScript(entries, resume))
+    .then((result) => {
+      if (result?.error) warnThrottled(`write:${familyOf(frame.url)}`, 'позиция не записалась в iframe', result.error)
+      return result?.written || 0
+    })
+    .catch((error) => {
+      warnThrottled(`write:${familyOf(frame.url)}`, 'не удалось открыть iframe для восстановления', error)
+      return 0
+    })
 
   webContents.on('did-frame-navigate', (_event, url, _code, _text, isMainFrame, processId, routingId) => {
     if (isMainFrame || isLocalUrl(url)) return

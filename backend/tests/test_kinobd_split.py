@@ -66,6 +66,82 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(merged["last_page"], 3)
 
 
+class ProxyCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.max_entries = server.PROXY_CACHE_MAX_ENTRIES
+        self.max_bytes = server.PROXY_CACHE_MAX_BYTES
+        server.PROXY_CACHE_MAX_ENTRIES = 3
+        server.PROXY_CACHE_MAX_BYTES = 10
+        server._proxy_cache.clear()
+        server._proxy_cache_bytes = 0
+
+    def tearDown(self):
+        server._proxy_cache.clear()
+        server._proxy_cache_bytes = 0
+        server.PROXY_CACHE_MAX_ENTRIES = self.max_entries
+        server.PROXY_CACHE_MAX_BYTES = self.max_bytes
+
+    def test_evicts_oldest_entries_by_count_and_size(self):
+        future = server.time.time() + 60
+        for index in range(4):
+            server._proxy_cache_put(str(index), (future, 200, "application/json", b"xx"))
+        self.assertEqual(list(server._proxy_cache), ["1", "2", "3"])
+
+        server._proxy_cache_put("large", (future, 200, "application/json", b"123456"))
+        self.assertLessEqual(server._proxy_cache_bytes, server.PROXY_CACHE_MAX_BYTES)
+        self.assertNotIn("1", server._proxy_cache)
+
+    def test_drops_stale_entry_after_grace_period(self):
+        expired = server.time.time() - server.PROXY_CACHE_STALE_TTL - 1
+        server._proxy_cache_put("old", (expired, 200, "application/json", b"{}"))
+        self.assertIsNone(server._proxy_cache_get("old", allow_stale=True))
+        self.assertEqual(server._proxy_cache_bytes, 0)
+
+    def test_expired_entry_remains_available_as_short_term_fallback(self):
+        server._proxy_cache_put(
+            "stale", (server.time.time() - 1, 200, "application/json", b"{}"))
+        self.assertIsNone(server._proxy_cache_get("stale"))
+        self.assertIsNotNone(server._proxy_cache_get("stale", allow_stale=True))
+
+
+class ProxyRouteTests(unittest.TestCase):
+    def test_tvmaze_uses_authority_server_in_client_mode(self):
+        mode, remote = server.AUTH_MODE, server.AUTH_SERVER_URL
+        try:
+            server.AUTH_MODE = "client"
+            server.AUTH_SERVER_URL = "https://auth.example.com/"
+            self.assertEqual(
+                server._proxy_base_for("tvmaze"),
+                "https://auth.example.com/ext/tvmaze",
+            )
+            self.assertEqual(server._proxy_base_for("kinobd"), server.PROXY_TARGETS["kinobd"])
+        finally:
+            server.AUTH_MODE, server.AUTH_SERVER_URL = mode, remote
+
+
+class StoredLibraryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_corrupt_movie_json_is_visible_instead_of_disappearing(self):
+        tg_id = 991122
+        token = "test-corrupt-library-token"
+        with server.db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO users (tg_id, name) VALUES (?, ?)",
+                (tg_id, "Test"),
+            )
+            conn.execute("INSERT OR REPLACE INTO tokens (token, tg_id) VALUES (?, ?)", (token, tg_id))
+            conn.execute("""
+                INSERT INTO user_lists
+                    (tg_id, list_type, kp_id, movie_json, added_at, updated_at, deleted, dirty, seq)
+                VALUES (?, 'favorites', 'broken', '{bad json', datetime('now'), 1, 0, 0, 0)
+                ON CONFLICT(tg_id, list_type, kp_id) DO UPDATE SET movie_json=excluded.movie_json
+            """, (tg_id,))
+
+        result = await server.list_get_all("favorites", f"Bearer {token}")
+
+        self.assertEqual(result["damaged"], 1)
+        self.assertEqual(result["items"], [{"kp_id": "broken", "title": "Повреждённая запись"}])
+
+
 class UpstreamTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.seen = []
@@ -104,6 +180,19 @@ class UpstreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_ban_status_reaches_breaker(self):
         status, _, _ = await self.fetch("page=1&per_page=50&q=ban")
         self.assertEqual(status, 429)
+
+    async def test_invalid_upstream_shape_is_not_treated_as_a_valid_empty_page(self):
+        original = server._fetch_upstream
+
+        async def invalid(*_args, **_kwargs):
+            return 200, "application/json", b'[]'
+
+        server._fetch_upstream = invalid
+        try:
+            with self.assertRaisesRegex(ValueError, "invalid page"):
+                await self.fetch("page=1&per_page=50")
+        finally:
+            server._fetch_upstream = original
 
 
 if __name__ == "__main__":

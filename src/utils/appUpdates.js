@@ -34,7 +34,9 @@ export const startUpdateWatch = () => {
   if (started || !api()) return
   started = true
   api().onStatus(apply)
-  api().status().then(apply).catch(() => {})
+  api().status().then(apply).catch((error) => {
+    apply({ state: 'error', error: `Не удалось получить состояние обновлений: ${error?.message || error}` })
+  })
 }
 
 export const onUpdateState = (listener) => {
@@ -44,7 +46,11 @@ export const onUpdateState = (listener) => {
 
 export const checkForUpdates = async () => {
   if (!api()) return
-  apply(await api().check())
+  try {
+    apply(await api().check())
+  } catch (error) {
+    apply({ state: 'error', error: `Проверка обновлений не удалась: ${error?.message || error}` })
+  }
 }
 
 /** Установленная версия ставит поверх; распакованная папка ведёт на страницу выпуска. */

@@ -49,10 +49,19 @@ export const normalizeMovieListEntry = (item, seoEntry = null) => {
 
 const getMovieSeoEnrichment = async (kpId) => {
   if (!seoEnrichmentPromises.has(kpId)) {
-    const enrichmentPromise = kinobd
-      .getMovieSeoByKpId(kpId)
+    let enrichmentPromise
+    enrichmentPromise = Promise.resolve()
+      .then(() => kinobd.getMovieSeoByKpId(kpId))
       .then((movie) => (movie ? registerMovieSeoEntry(movie) : null))
-      .catch(() => null)
+      .catch((error) => {
+        // Сетевой сбой не является постоянным отсутствием данных: следующий
+        // заход должен попробовать снова, особенно ради названия и постера.
+        if (seoEnrichmentPromises.get(kpId) === enrichmentPromise) {
+          seoEnrichmentPromises.delete(kpId)
+        }
+        console.warn(`[movie-seo] не удалось обогатить ${kpId}:`, error?.message || error)
+        return null
+      })
 
     seoEnrichmentPromises.set(kpId, enrichmentPromise)
   }

@@ -107,8 +107,9 @@ const search = async () => {
         errorMessage.value = 'Не удалось найти фильм по IMDB ID'
       }
     }
-  } catch {
+  } catch (error) {
     errorMessage.value = 'Ошибка при поиске. Проверьте ID и попробуйте снова.'
+    console.warn('[id-search] поиск не удался:', error?.message || error)
   } finally {
     loading.value = false
   }

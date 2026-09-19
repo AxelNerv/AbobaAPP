@@ -132,10 +132,10 @@ def validate_item(raw, now=None) -> dict:
             "updated_at": updated_at, "added_at": added_at}
 
 
-def validate_items(raw_items) -> list:
+def validate_items(raw_items, max_items: int = MAX_ITEMS_PER_REQUEST) -> list:
     if not isinstance(raw_items, list):
         raise SyncError("Ожидался список записей")
-    if len(raw_items) > MAX_ITEMS_PER_REQUEST:
+    if len(raw_items) > max_items:
         raise SyncError("Слишком много записей за раз")
     now = now_ms()
     return [validate_item(item, now) for item in raw_items]
