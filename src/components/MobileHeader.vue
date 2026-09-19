@@ -61,8 +61,10 @@ onUnmounted(() => {
   transition: background 0.3s ease;
 }
 
+/* В цвет боковой панели и меню, а не серый */
 .app-header.scrolled {
-  background: rgba(30, 30, 30, 0.97);
+  background: rgba(9, 14, 28, 0.97);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.07);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -90,6 +92,9 @@ onUnmounted(() => {
   z-index: 6;
   padding: 10px 0;
   height: 60px;
+  /* Ровно 60px вместе с отступами: меню начинается с 60px, и при высоте
+     80px шапка закрывала верхний пункт «Главная» */
+  box-sizing: border-box;
 }
 
 .header-content {

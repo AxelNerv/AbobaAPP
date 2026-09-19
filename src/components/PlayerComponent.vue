@@ -4,7 +4,6 @@
   <template v-else>
     <!-- Кнопка для открытия модалки выбора плеера -->
     <div class="players-list">
-      <span>Плеер:</span>
       <button class="player-btn" @click="openPlayerModal">
         {{
           selectedPlayerInternal
@@ -1256,9 +1255,6 @@ onBeforeUnmount(() => {
   .players-list {
     padding: 0 12px;
     box-sizing: border-box;
-  }
-  .players-list > span {
-    display: none;
   }
   .player-btn {
     flex: 1;
