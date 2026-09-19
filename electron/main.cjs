@@ -170,10 +170,25 @@ const createWindow = () => {
 
   // localUrl задаётся при старте: file:// не годится — собранный сайт
   // ищет ресурсы от корня диска и экран остаётся пустым.
-  mainWindow.loadURL(isDev ? 'http://localhost:5173' : localUrl).catch((err) => {
-    showStartupError(`Не удалось открыть интерфейс: ${err.message}`)
-    app.quit()
-  })
+  // Первая загрузка изредка срывается на сетевой заминке Windows
+  // (ERR_NO_BUFFER_SPACE и т. п., 19.09.2026 — один раз, повторить не удалось).
+  // Одна такая заминка не должна закрывать приложение: пробуем ещё несколько раз.
+  const loadInterface = async (attempt = 1) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    try {
+      await mainWindow.loadURL(isDev ? 'http://localhost:5173' : localUrl)
+    } catch (err) {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (attempt < 5) {
+        console.warn(`[startup] интерфейс не открылся (попытка ${attempt}): ${err.message}`)
+        setTimeout(() => loadInterface(attempt + 1), 500 * attempt)
+        return
+      }
+      showStartupError(`Не удалось открыть интерфейс: ${err.message}`)
+      app.quit()
+    }
+  }
+  loadInterface()
 
   mainWindow.on('close', (event) => {
     if (settings.closeToTray && tray && !quitting) {

@@ -66,3 +66,11 @@ desktop.ini
 
 # Адрес сервера входа по умолчанию — не публикуем (см. electron/server.local.example.json)
 electron/server.local.json
+
+# Серверная часть (VPS: бот, вход, синхронизация) — хранится только локально,
+# в репозиторий приложения не входит
+deploy/
+backend/Dockerfile
+backend/Dockerfile.bot
+backend/.dockerignore
+backend/bot.py
