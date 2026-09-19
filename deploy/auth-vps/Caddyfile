@@ -22,6 +22,18 @@
 		reverse_proxy auth:8000
 	}
 
+	# Статус сериала и даты серий (TVmaze). Из части домашних сетей
+	# api.tvmaze.com напрямую не открывается, поэтому приложения ходят
+	# через этот сервер. Только чтение, только /ext/tvmaze — остальные
+	# источники прокси наружу не открываем.
+	@tvmaze {
+		method GET
+		path /ext/tvmaze/*
+	}
+	handle @tvmaze {
+		reverse_proxy auth:8000
+	}
+
 	handle {
 		respond 404
 	}

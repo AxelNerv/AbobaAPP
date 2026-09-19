@@ -62,6 +62,10 @@ say "Синхронизация без ключа должна отвечать 
 curl -s -o /dev/null -w "/sync → %{http_code}\n" -X POST -H 'Content-Type: application/json' \
   -d '{"cursor":0,"items":[]}' "${URL}/sync" || true
 
+say "Статус сериалов (TVmaze) должен отвечать 200"
+curl -s -o /dev/null -w "/ext/tvmaze → %{http_code}
+" "${URL}/ext/tvmaze/lookup/shows?imdb=tt1520211" || true
+
 say "Состояние"
 docker compose ps -a
 docker compose logs --tail 20 caddy 2>&1 || true
