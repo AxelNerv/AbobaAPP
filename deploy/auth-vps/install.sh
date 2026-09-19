@@ -37,6 +37,9 @@ say "Собираю и запускаю контейнеры"
 # Без выхода по ошибке: если что-то не поднялось, ниже нужна диагностика,
 # а не молчаливый обрыв на середине.
 docker compose up -d --build || say "docker compose завершился с ошибкой — смотри состояние ниже"
+# Caddy не пересоздаётся, если поменялся только Caddyfile, и держит старые
+# правила. Перечитываем их явно (без остановки); не вышло — перезапуск.
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile   || docker compose restart caddy || true
 
 say "Жду, пока сервер входа ответит"
 status=""
