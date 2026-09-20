@@ -132,6 +132,7 @@ import { useHead } from '@unhead/vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'
 import RandomMovieModal from '@/components/RandomMovieModal.vue'
 import { getMovieSeoPath } from '@/utils/movieSeo'
+import { createLatestRequestGuard } from '@/utils/latestRequest'
 
 const mainStore = useMainStore()
 const authStore = useAuthStore()
@@ -169,6 +170,7 @@ const showRandomModal = ref(false)
 const randomMovie = ref(null)
 const randomLoading = ref(false)
 const randomError = ref('')
+const searchRequestGuard = createLatestRequestGuard()
 
 const searchInput = ref(null)
 const siteOrigin = import.meta.env.VITE_SITE_ORIGIN || ''
@@ -366,6 +368,7 @@ const getPlaceholder = () => {
 
 // Очистка поиска
 const resetSearch = () => {
+  searchRequestGuard.invalidate()
   searchTerm.value = ''
   movies.value = []
   searchPerformed.value = false
@@ -385,24 +388,34 @@ const search = () => {
 }
 
 const performSearch = async () => {
+  const request = searchRequestGuard.begin()
+  const requestedType = searchType.value
+  const requestedTerm = searchTerm.value
+  const isCurrentSearch = () =>
+    searchRequestGuard.isCurrent(request) &&
+    searchType.value === requestedType &&
+    (requestedType === 'title'
+      ? searchTerm.value === requestedTerm
+      : searchTerm.value.replace(/\D/g, '') === requestedTerm.replace(/\D/g, ''))
   loading.value = true
   searchPerformed.value = true
   movies.value = []
 
   try {
-    if (searchType.value === 'kinopoisk') {
-      if (!/^\d+$/.test(searchTerm.value)) {
-        searchTerm.value = searchTerm.value.replace(/\D/g, '')
+    if (requestedType === 'kinopoisk') {
+      const kpId = requestedTerm.replace(/\D/g, '')
+      if (!isCurrentSearch()) return
+      if (kpId !== searchTerm.value) {
+        searchTerm.value = kpId
       }
-      router.push(getMovieSeoPath({ kp_id: searchTerm.value }))
+      router.push(getMovieSeoPath({ kp_id: kpId }))
       return
     }
 
-    if (searchType.value === 'imdb') {
-      if (!/^\d+$/.test(searchTerm.value)) {
-        searchTerm.value = searchTerm.value.replace(/\D/g, '')
-      }
-      const response = await getKpIDfromIMDB(searchTerm.value)
+    if (requestedType === 'imdb') {
+      const imdbId = requestedTerm.replace(/\D/g, '')
+      const response = await getKpIDfromIMDB(imdbId)
+      if (!isCurrentSearch()) return
       if (response.id_kp) {
         router.push(getMovieSeoPath({ kp_id: `${response.id_kp}` }))
       } else {
@@ -411,8 +424,9 @@ const performSearch = async () => {
       return
     }
 
-    if (searchType.value === 'title') {
-      const response = await apiSearch(searchTerm.value)
+    if (requestedType === 'title') {
+      const response = await apiSearch(requestedTerm)
+      if (!isCurrentSearch()) return
       movies.value = response.map((movie) => ({
         ...movie,
         kp_id: movie.id.toString(),
@@ -421,12 +435,13 @@ const performSearch = async () => {
       }))
     }
   } catch (error) {
+    if (!isCurrentSearch()) return
     const { message, code } = handleApiError(error)
     errorMessage.value = message
     errorCode.value = code
     console.error('Ошибка при поиске:', error)
   } finally {
-    loading.value = false
+    if (searchRequestGuard.isCurrent(request)) loading.value = false
   }
 }
 
@@ -458,8 +473,16 @@ onMounted(async () => {
 })
 
 // Автопоиск с задержкой (только для поиска по названию)
-watch(searchTerm, () => {
+watch(searchTerm, (term) => {
   if (searchType.value !== 'title') {
+    return
+  }
+  if (term.length < 2) {
+    debouncedPerformSearch.cancel()
+    searchRequestGuard.invalidate()
+    movies.value = []
+    searchPerformed.value = false
+    loading.value = false
     return
   }
   debouncedPerformSearch()

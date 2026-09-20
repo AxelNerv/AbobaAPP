@@ -302,11 +302,14 @@ const askClear = () => {
 }
 
 const doClear = async () => {
+  const targetTab = activeTab.value
+  const targetType =
+    targetTab === 'history' ? USER_LIST_TYPES_ENUM.HISTORY : USER_LIST_TYPES_ENUM.FAVORITE
   confirmOpen.value = false
   clearing.value = true
   try {
-    await delAllFromList(listTypeFor())
-    if (activeTab.value === 'history') history.value = []
+    await delAllFromList(targetType)
+    if (targetTab === 'history') history.value = []
     else favorites.value = []
   } catch (error) {
     loadError.value = `Не удалось очистить список: ${error?.message || 'ошибка сервера'}`
