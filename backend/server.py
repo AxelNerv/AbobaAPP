@@ -768,7 +768,7 @@ _UHD_FLAG_RE = re.compile(r'"uhd"\s*:\s*1\b')
 _UHD_CACHE: dict = {}
 UHD_CACHE_TTL = 6 * 60 * 60
 UHD_CACHE_MAX = 2000
-UHD_MAX_BYTES = 512 * 1024
+UHD_MAX_BYTES = 2 * 1024 * 1024  # у длинных сериалов страница плеера за 1 МБ
 # 198.18.0.0/15 формально «служебная» сеть, но её раздают прокси-клиенты в режиме
 # fake-IP (так устроен роутер Axel): все внешние имена резолвятся туда.
 _FAKE_IP_NET = ipaddress.ip_network("198.18.0.0/15")
@@ -801,8 +801,25 @@ def address_is_public(address: str) -> bool:
                 or ip.is_multicast or ip.is_unspecified)
 
 
+_UHD_ANY_RE = re.compile(r'"uhd"\s*:\s*\d+')
+_EPISODE_RE = re.compile(r'"episode"\s*:')
+
+
 def page_has_uhd(html: str) -> bool:
-    return bool(_UHD_FLAG_RE.search(html or ""))
+    """Честная ли метка «4K».
+
+    У фильма флаг стоит у каждой озвучки: хоть одна в 4K — её можно выбрать.
+    У сериала флаг у каждой пары «серия + озвучка», и 4K бывает у пары серий
+    одной озвучки (Футурама: 2 из 939) — метка тогда обманывает. Для сериала
+    требуем, чтобы в 4K была хотя бы половина вариантов.
+    """
+    html = html or ""
+    uhd = len(_UHD_FLAG_RE.findall(html))
+    if not uhd:
+        return False
+    if not _EPISODE_RE.search(html):
+        return True
+    return uhd * 2 >= len(_UHD_ANY_RE.findall(html))
 
 
 @app.get("/player/alloha-uhd")
@@ -836,7 +853,14 @@ async def alloha_uhd(url: str):
             if resp.status != 200:
                 print(f"[uhd] плеер ответил {resp.status}")
                 return {"uhd": False}
-            body = await resp.content.read(UHD_MAX_BYTES)
+            # read(n) отдаёт то, что уже пришло, а не n байт — читаем по кускам
+            chunks, size = [], 0
+            async for chunk in resp.content.iter_chunked(64 * 1024):
+                chunks.append(chunk)
+                size += len(chunk)
+                if size >= UHD_MAX_BYTES:
+                    break
+            body = b"".join(chunks)[:UHD_MAX_BYTES]
     except (aiohttp.ClientError, asyncio.TimeoutError) as error:
         # Метка — подсказка, а не условие работы плеера: не смогли узнать —
         # просто не рисуем её. В журнал пишем, чтобы это не было загадкой.

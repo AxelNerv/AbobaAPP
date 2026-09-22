@@ -54,6 +54,18 @@ class PageTests(unittest.TestCase):
         self.assertFalse(server.page_has_uhd('"uhd":10'))
         self.assertFalse(server.page_has_uhd(""))
 
+    def test_series_needs_most_episodes_in_uhd(self):
+        ep = '{"seasons":1,"episode":%d,"translation":"x","uhd":%d}'
+        # Футурама: 4K у пары серий одной озвучки — метку не ставим
+        few = ",".join(ep % (i, 1 if i < 2 else 0) for i in range(100))
+        self.assertFalse(server.page_has_uhd(few))
+        most = ",".join(ep % (i, 1 if i < 60 else 0) for i in range(100))
+        self.assertTrue(server.page_has_uhd(most))
+
+    def test_movie_one_translation_is_enough(self):
+        tr = '{"translation":"t%d","quality":"WEB-DL","uhd":%d}'
+        self.assertTrue(server.page_has_uhd(",".join(tr % (i, 1 if i == 0 else 0) for i in range(8))))
+
 
 if __name__ == "__main__":
     unittest.main()
