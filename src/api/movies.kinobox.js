@@ -44,14 +44,14 @@ const normalizePlayerType = (value) => String(value || 'Player').trim()
 const UNWANTED_PLAYER_RE = /trailer|netflix|youtube\.com|youtu\.be|\bnf\b/i
 const isUnwantedPlayer = (s = '') => UNWANTED_PLAYER_RE.test(String(s))
 
-const toPlayersMap = (providers = [], { type = null, translationId = null } = {}) => {
+const toPlayersMap = (providers = [], { type = null, translationId = null, source = 'kinobox' } = {}) => {
   const players = {}
   const selectedType = type ? String(type).toLowerCase() : null
   const selectedTranslationId =
     translationId === null || translationId === undefined ? null : String(translationId)
 
   for (const provider of providers) {
-    const providerType = normalizePlayerType(provider?.type)
+    const providerType = normalizePlayerType(provider?.type || provider?.source)
 
     if (selectedType && providerType.toLowerCase() !== selectedType) {
       continue
@@ -72,7 +72,8 @@ const toPlayersMap = (providers = [], { type = null, translationId = null } = {}
         iframe: providerBaseIframe,
         quality: '',
         warning: false,
-        source: 'kinobox',
+        source,
+        provider: providerType,
         raw_data: provider
       }
     }
@@ -94,7 +95,7 @@ const toPlayersMap = (providers = [], { type = null, translationId = null } = {}
         iframe,
         quality: translation?.quality || '',
         warning: false,
-        source: 'kinobox',
+        source,
         raw_data: translation,
         provider: providerType
       }
@@ -114,7 +115,11 @@ const getPlayersRaw = async (kpId, { title = '' } = {}) => {
     })
   )
 
-  return Array.isArray(data?.data) ? data.data : []
+  const providers = Array.isArray(data) ? data : data?.data
+  if (data?.error || !Array.isArray(providers)) {
+    throw new Error('Kinobox вернул некорректный список плееров')
+  }
+  return providers
 }
 
 const getPlayers = async (kpId, options = {}) => {
@@ -122,7 +127,7 @@ const getPlayers = async (kpId, options = {}) => {
   return toPlayersMap(providers, options)
 }
 
-export { getPlayers, getPlayersRaw }
+export { getPlayers, getPlayersRaw, toPlayersMap }
 
 export const toggleErrorSimulation = (enabled) => {
   isErrorSimulationEnabled = enabled

@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse
 from typing import Optional
 
 import aiohttp
+from movie_sources import MovieSources, SourceUnavailable
 import sync
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -432,6 +433,21 @@ async def _get_session_for(provider: str) -> aiohttp.ClientSession:
             connector=aiohttp.TCPConnector(force_close=True),
         )
     return _fresh_http_session
+
+
+_movie_sources = MovieSources()
+
+
+@app.get("/player/sources/{kp_id}")
+async def movie_sources(kp_id: str):
+    """Local independent source: metadata and reachable embeds share one lookup."""
+    try:
+        return await _movie_sources.get(kp_id, await _get_http_session(), _BROWSER_HEADERS)
+    except ValueError:
+        raise HTTPException(400, "Invalid Kinopoisk ID")
+    except SourceUnavailable as error:
+        print(f"[sources] {kp_id}: {error}")
+        raise HTTPException(502, f"Player source unavailable: {error}")
 
 
 # ── Постеры для устройств в сети ──

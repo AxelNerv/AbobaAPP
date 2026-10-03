@@ -1,6 +1,7 @@
 import { useMainStore } from '@/store/main'
 import * as kinobd from '@/api/movies.kinobd'
 import * as kinobox from '@/api/movies.kinobox'
+import * as fbp from '@/api/movies.fbp'
 import * as tmdb from '@/api/movies.tmdb'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 
@@ -107,28 +108,19 @@ const getKpInfo = async (...args) => {
 
   const data = await tryInOrder(
     'getKpInfo',
-    [{ name: 'kinobd', run: () => kinobd.getKpInfo(...args) }],
-    isGoodInfo
+    [
+      { name: 'fbp', run: () => fbp.getKpInfo(...args) },
+      { name: 'kinobd', run: () => kinobd.getKpInfo(...args) }
+    ],
+    isGoodInfo,
+    { retries: 0 }
   )
 
   // Добираем у TMDB описание и постер, если их нет. TMDB не банит по IP,
   // поэтому закрывает дыры, которые оставляют остальные источники.
   return await tmdb.enrichMissingFields(data)
 }
-// getPlayers с явным fallback chain: kinobd → kinobox
-//
-// Порядок важен для скорости. Раньше первым шёл kinobox, но он сейчас не
-// отвечает (закрывает соединение без ответа). Брейкер на бэкенде отключает
-// мёртвый источник лишь на 30 минут, и после каждого сброса первый же
-// посетитель ждал таймаут (connect 4с / total 8с) ПЕРЕД тем как получить
-// плееры с живого kinobd. Отсюда и ощущение «сайт умер / грузится вечно»,
-// повторяющееся примерно раз в полчаса.
-//
-// Теперь первым идёт kinobd — он живой и отвечает за ~0.5с. Kinobox оставлен
-// в цепочке вторым: если оживёт, снова будет использоваться.
-//
-// Каждый источник проверяется на пустоту — {} или пустой объект без ключей
-// считается неудачей и пробуем следующий источник.
+// Independent source first: a KinoBD outage must not delay a working player.
 const hasPlayers = (result) =>
   result && typeof result === 'object' && Object.keys(result).length > 0
 
@@ -136,33 +128,24 @@ const getPlayers = async (...args) => {
   let failedSources = 0
   let lastError = null
 
-  // 1. KinoBD — основной рабочий источник
-  try {
-    const result = await kinobd.getPlayers(...args)
-    if (hasPlayers(result)) return result
-    console.warn('[movies] getPlayers: kinobd returned empty, trying kinobox')
-  } catch (e) {
-    failedSources += 1
-    lastError = e
-    console.warn('[movies] getPlayers: kinobd failed:', e?.message)
-  }
-
-  // 2. Kinobox
-  try {
-    const result = await kinobox.getPlayers(...args)
-    if (hasPlayers(result)) return result
-    console.warn('[movies] getPlayers: kinobox returned empty')
-  } catch (e) {
-    failedSources += 1
-    lastError = e
-    console.warn('[movies] getPlayers: kinobox failed:', e?.message)
+  const sources = [fbp, kinobd, kinobox]
+  for (const source of sources) {
+    try {
+      const result = await source.getPlayers(...args)
+      if (hasPlayers(result)) return result
+      console.warn('[movies] getPlayers: источник вернул пустой список')
+    } catch (error) {
+      failedSources += 1
+      lastError = error
+      console.warn('[movies] getPlayers:', error?.message)
+    }
   }
 
   // Раньше здесь молча возвращался {} — и когда падали ВСЕ источники, UI
   // показывал «плееров нет», как будто их нет для этого фильма. Отличить
   // «фильма нет ни у кого» от «все источники лежат» было невозможно.
   // Теперь разница явная: пусто — это пусто, а отказ источников — ошибка.
-  if (failedSources === 2) {
+  if (failedSources === sources.length) {
     const err = new Error('Все источники плееров недоступны')
     err.cause = lastError
     err.allSourcesDown = true
