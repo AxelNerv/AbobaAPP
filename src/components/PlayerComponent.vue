@@ -546,36 +546,37 @@ const centerPlayer = () => {
   }
 }
 
+let playerRequest = null
+let playerDisposed = false
+const failedPlayerSources = new Set()
 const fetchPlayers = async () => {
+  if (playerDisposed) return
+  playerRequest?.abort()
+  const request = new AbortController()
+  playerRequest = request
   try {
     errorMessage.value = ''
     errorCode.value = null
 
-    // Таймаут 20 секунд — учитываем VPN пользователей у которых загрузка медленнее
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 20000)
-    )
-
+    // Each source has its own deadline; a global timer must not cut off backups.
     const savedInid = playerStore.kinobdSourceByKpId?.[String(props.kpId)] || null
-    const players = await Promise.race([
-      getPlayers(props.kpId, {
-        mode: 'kp_id',
-        usePlayerData: true,
-        forceInid: isKinoBdProvider.value ? savedInid : null
-      }),
-      timeout
-    ])
+    const players = await getPlayers(props.kpId, {
+      mode: 'kp_id',
+      usePlayerData: true,
+      forceInid: isKinoBdProvider.value ? savedInid : null,
+      excludeSources: [...failedPlayerSources],
+      signal: request.signal
+    })
+    if (request.signal.aborted || playerDisposed) return
     applyPlayersData(players)
     // Если после всех источников плееров нет — останавливаем спираль
     if (playersInternal.value.length === 0) {
       iframeLoading.value = false
     }
   } catch (error) {
+    if (request.signal.aborted || playerDisposed) return
     iframeLoading.value = false
-    if (error?.message === 'timeout') {
-      errorMessage.value = 'Плееры не найдены для этого фильма. Попробуйте другой фильм или включите VPN.'
-      errorCode.value = 404
-    } else if (error?.allSourcesDown) {
+    if (error?.allSourcesDown) {
       // Важно отличать от «плееров нет»: тут фильм ни при чём, лежат источники.
       // Раньше оба случая выглядели одинаково — пустой список без объяснений.
       errorMessage.value =
@@ -587,6 +588,8 @@ const fetchPlayers = async () => {
       errorCode.value = code
     }
     console.error('Ошибка при загрузке плееров:', error)
+  } finally {
+    if (playerRequest === request) playerRequest = null
   }
 }
 
@@ -689,6 +692,9 @@ const toggleDimming = () => {
 }
 
 const onIframeLoad = () => {
+  // Clearing an exhausted source navigates the iframe to a blank page. That
+  // load must not hide the spinner while the next API request is in progress.
+  if (!selectedPlayerInternal.value || playerDisposed) return
   iframeLoading.value = false
   clearLoadWatchdog()
 }
@@ -904,7 +910,7 @@ const clearLoadWatchdog = () => {
 
 const goToNextWorkingPlayer = () => {
   const cur = selectedPlayerInternal.value
-  if (!cur) return
+  if (!cur || playerDisposed) return
   autoTriedKeys.value.add(cur.key)
   const next = playersInternal.value.find(
     (p) => p.key !== cur.key && !autoTriedKeys.value.has(p.key)
@@ -912,7 +918,24 @@ const goToNextWorkingPlayer = () => {
   if (next) {
     console.debug('[player] авто-скип зависшего источника', cur.key, '→', next.key)
     selectedPlayerInternal.value = next
+    return
   }
+  // API can answer successfully even when none of its embeds load. Try another
+  // aggregator once; exclusions live only for this mounted movie, not forever.
+  const sources = playersInternal.value.map(player => player.source).filter(Boolean)
+  const fresh = sources.filter(source => !failedPlayerSources.has(source))
+  if (!fresh.length) {
+    iframeLoading.value = false
+    errorMessage.value = 'Ни один плеер не загрузился. Попробуйте открыть фильм позже.'
+    errorCode.value = 503
+    return
+  }
+  for (const source of fresh) failedPlayerSources.add(source)
+  clearLoadWatchdog()
+  selectedPlayerInternal.value = null
+  playersInternal.value = []
+  iframeLoading.value = true
+  void fetchPlayers()
 }
 
 const startLoadWatchdog = () => {
@@ -1140,6 +1163,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  playerDisposed = true
+  playerRequest?.abort()
+  clearLoadWatchdog()
   clearInterval(progressTimer)
   void saveProgress().catch((error) => reportProgressIssue('финальное сохранение', error, true))
 

@@ -4,6 +4,20 @@ import * as kinobox from '@/api/movies.kinobox'
 import * as fbp from '@/api/movies.fbp'
 import * as tmdb from '@/api/movies.tmdb'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
+import { runSourceChain } from '@/api/sourceChain'
+
+// Keep old sources: every new request tries them again after the earlier ones fail.
+// New independent adapters are added here; mirrors of the same API are not sources.
+const MOVIE_SOURCES = [
+  { id: 'fbp', name: 'FBP', timeoutMs: 11000,
+    players: (id, options) => fbp.getPlayers(id, options),
+    info: (id, options) => fbp.getKpInfo(id, options) },
+  { id: 'kinobd', name: 'KinoBD', timeoutMs: 10000,
+    players: (id, options) => kinobd.getPlayers(id, options),
+    info: (id, options) => kinobd.getKpInfo(id, options) },
+  { id: 'kinobox', name: 'Kinobox', timeoutMs: 8000,
+    players: (id, options) => kinobox.getPlayers(id, options) }
+]
 
 const CONTENT_PROVIDERS = {
   KINOBD: 'kinobd',
@@ -102,18 +116,15 @@ const tryInOrder = async (label, sources, isGood, { retries = 1, retryDelay = 70
 
 const hasRows = (rows) => Array.isArray(rows) && rows.length > 0
 
-const getKpInfo = async (...args) => {
+const getKpInfo = async (kpId, _token, { signal } = {}) => {
   const isGoodInfo = (d) =>
     !!(d && (d.kpId || d.kp_id || d.nameRu || d.nameOriginal || d.title))
 
-  const data = await tryInOrder(
-    'getKpInfo',
-    [
-      { name: 'fbp', run: () => fbp.getKpInfo(...args) },
-      { name: 'kinobd', run: () => kinobd.getKpInfo(...args) }
-    ],
-    isGoodInfo,
-    { retries: 0 }
+  const data = await runSourceChain(
+    MOVIE_SOURCES.filter(source => source.info).map(source => ({
+      ...source, run: attemptSignal => source.info(kpId, { signal: attemptSignal })
+    })),
+    { label: 'getKpInfo', isUsable: isGoodInfo, signal }
   )
 
   // Добираем у TMDB описание и постер, если их нет. TMDB не банит по IP,
@@ -122,38 +133,22 @@ const getKpInfo = async (...args) => {
 }
 // Independent source first: a KinoBD outage must not delay a working player.
 const hasPlayers = (result) =>
-  result && typeof result === 'object' && Object.keys(result).length > 0
+  result && typeof result === 'object' && !Array.isArray(result) &&
+  Object.values(result).some(player => typeof player?.iframe === 'string' && /^https?:\/\//.test(player.iframe))
 
-const getPlayers = async (...args) => {
-  let failedSources = 0
-  let lastError = null
-
-  const sources = [fbp, kinobd, kinobox]
-  for (const source of sources) {
-    try {
-      const result = await source.getPlayers(...args)
-      if (hasPlayers(result)) return result
-      console.warn('[movies] getPlayers: источник вернул пустой список')
-    } catch (error) {
-      failedSources += 1
-      lastError = error
-      console.warn('[movies] getPlayers:', error?.message)
-    }
-  }
-
-  // Раньше здесь молча возвращался {} — и когда падали ВСЕ источники, UI
-  // показывал «плееров нет», как будто их нет для этого фильма. Отличить
-  // «фильма нет ни у кого» от «все источники лежат» было невозможно.
-  // Теперь разница явная: пусто — это пусто, а отказ источников — ошибка.
-  if (failedSources === sources.length) {
-    const err = new Error('Все источники плееров недоступны')
-    err.cause = lastError
-    err.allSourcesDown = true
-    throw err
-  }
-
-  console.warn('[movies] getPlayers: у источников нет плееров для этого фильма')
-  return {}
+const getPlayers = async (kpId, options = {}) => {
+  // Resume AFTER the exhausted aggregator. Earlier APIs were already tried;
+  // do not revisit them until the user opens this movie again.
+  const lastExcluded = MOVIE_SOURCES.reduce((last, source, index) =>
+    options.excludeSources?.includes(source.id) ? index : last, -1)
+  return runSourceChain(
+    MOVIE_SOURCES.slice(lastExcluded + 1).map(source => ({
+      ...source, run: signal => source.players(kpId, { ...options, signal })
+    })),
+    { label: 'getPlayers', isUsable: hasPlayers,
+      isEmpty: value => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0,
+      emptyResult: {}, signal: options.signal }
+  )
 }
 const getMovies = async (...args) => {
   const typeFilter = args?.[0]?.typeFilter || 'all'

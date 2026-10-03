@@ -3,6 +3,7 @@ import { getBackendUrl } from '@/api/backendUrl'
 import { toPlayersMap } from '@/api/movies.kinobox'
 import { getMovieSeoEntry } from '@/utils/movieSeo'
 import { resolvePosterSetByMovie } from '@/utils/mediaUtils'
+import { waitForSharedRequest } from '@/api/sourceChain'
 
 const requests = new Map()
 const CACHE_MS = 120_000
@@ -32,7 +33,8 @@ const getSources = (kpId) => {
 }
 
 export const getPlayers = async (kpId, options = {}) => {
-  const { providers } = await getSources(kpId)
+  if (options.signal?.aborted) throw options.signal.reason
+  const { providers } = await waitForSharedRequest(getSources(kpId), options.signal)
   // Turbo and Collaps passed real playback in Electron. The aggregator's Alloha
   // renders a player but its video stalls, so old preferences must not select it.
   const playable = providers.filter((provider) => /^(turbo|collaps)$/i.test(String(provider.type)))
@@ -46,8 +48,9 @@ export const getPlayers = async (kpId, options = {}) => {
   return toPlayersMap(russian, { ...options, source: 'fbp' })
 }
 
-export const getKpInfo = async (kpId) => {
-  const data = await getSources(kpId)
+export const getKpInfo = async (kpId, { signal } = {}) => {
+  if (signal?.aborted) throw signal.reason
+  const data = await waitForSharedRequest(getSources(kpId), signal)
   const known = getMovieSeoEntry(kpId)
   const title = data.title || known?.name_ru || known?.title
   if (!title) return null

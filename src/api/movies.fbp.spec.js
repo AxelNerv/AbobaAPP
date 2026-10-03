@@ -63,4 +63,19 @@ describe('общая загрузка информации и плееров', (
     ] } })
     expect(Object.values(await getPlayers('687595')).map(p => p.provider)).toEqual(['Turbo', 'Collaps'])
   })
+
+  it('отмена плеера не отменяет общий запрос названия фильма', async () => {
+    const { getPlayers, getKpInfo } = await import('@/api/movies.fbp')
+    let finish
+    httpGet.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const controller = new AbortController()
+    const players = getPlayers('687595', { signal: controller.signal })
+    const info = getKpInfo('687595')
+    const rejected = expect(players).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await rejected
+    finish({ data: { kp_id: '687595', title: 'Кухня', providers: [] } })
+    expect(await info).toMatchObject({ name_ru: 'Кухня' })
+    expect(httpGet).toHaveBeenCalledTimes(1)
+  })
 })

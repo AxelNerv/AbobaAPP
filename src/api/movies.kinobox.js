@@ -105,9 +105,10 @@ const toPlayersMap = (providers = [], { type = null, translationId = null, sourc
   return players
 }
 
-const getPlayersRaw = async (kpId, { title = '' } = {}) => {
+const getPlayersRaw = async (kpId, { title = '', signal } = {}) => {
   const { data } = await apiCall((client) =>
     client.get('/api/players', {
+      signal,
       params: {
         kinopoisk: String(kpId),
         ...(title ? { title: String(title) } : {})

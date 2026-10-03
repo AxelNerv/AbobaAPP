@@ -344,10 +344,11 @@ const toProviderPlayersMap = (providerMap = {}) => {
   return players
 }
 
-const searchPlayerCandidates = async (query, { type = 'title', page = 1 } = {}) => {
+const searchPlayerCandidates = async (query, { type = 'title', page = 1, signal } = {}) => {
   const normalizedType = type === 'kp_id' ? 'kp_id' : 'title'
   const { data } = await apiCall((api) =>
     api.get('/api/player/search', {
+      signal,
       params: {
         q: String(query),
         type: normalizedType,
@@ -356,7 +357,8 @@ const searchPlayerCandidates = async (query, { type = 'title', page = 1 } = {}) 
     })
   )
 
-  const rows = Array.isArray(data?.data) ? data.data : []
+  if (!Array.isArray(data?.data) || data?.error) throw new Error('KinoBD вернул некорректный список плееров')
+  const rows = data.data
   return rows.map((item) => ({
     id: item?.id ?? null, // inid for /playerdata
     kp_id: item?.kinopoisk_id || item?.kp_id || null,
@@ -370,7 +372,7 @@ const searchPlayerCandidates = async (query, { type = 'title', page = 1 } = {}) 
 
 const getPlayerDataByInid = async (
   inid,
-  { playerUrl = '', cacheKey = '', providers = DEFAULT_PLAYER_PROVIDERS, fast = 1 } = {}
+  { playerUrl = '', cacheKey = '', providers = DEFAULT_PLAYER_PROVIDERS, fast = 1, signal } = {}
 ) => {
   const resolvedPlayerUrl = toAbsoluteUrl(playerUrl)
   const playerOrigin = (() => {
@@ -397,10 +399,14 @@ const getPlayerDataByInid = async (
 
   const { data } = await apiCall((api) =>
     api.post(`/playerdata?${params}`, body.toString(), {
+      signal,
       headers
     })
   )
 
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.error) {
+    throw new Error('KinoBD вернул некорректные данные плеера')
+  }
   return toProviderPlayersMap(data)
 }
 
@@ -463,9 +469,10 @@ const apiSearch = async (searchTerm, page = 1) => {
   return rows.map(buildLegacyMovie)
 }
 
-const getKpInfo = async (kpId) => {
+const getKpInfo = async (kpId, { signal } = {}) => {
   const response = await apiCall((api) =>
     api.get('/api/films/search/kp_id', {
+      signal,
       params: {
         q: String(kpId),
         page: 1,
@@ -479,7 +486,8 @@ const getKpInfo = async (kpId) => {
     })
   )
 
-  const film = Array.isArray(response?.data?.data) ? response.data.data[0] : null
+  if (!Array.isArray(response?.data?.data) || response.data.error) throw new Error('KinoBD вернул некорректную информацию о фильме')
+  const film = response.data.data[0]
   return film ? mapKpInfo(film) : null
 }
 
@@ -503,10 +511,11 @@ const getPlayers = async (kpId, options = {}) => {
     selectIndex = 0,
     usePlayerData = true,
     providers = DEFAULT_PLAYER_PROVIDERS,
-    forceInid = null
+    forceInid = null,
+    signal
   } = options
   const searchType = mode === 'title' ? 'title' : 'kp_id'
-  const candidates = await searchPlayerCandidates(kpId, { type: searchType, page: 1 })
+  const candidates = await searchPlayerCandidates(kpId, { type: searchType, page: 1, signal })
 
   if (!candidates.length && !forceInid) return {}
 
@@ -521,11 +530,15 @@ const getPlayers = async (kpId, options = {}) => {
 
     if (selected?.id || forceInid) {
       try {
-        return await getPlayerDataByInid(selected?.id || forceInid, {
+        const players = await getPlayerDataByInid(selected?.id || forceInid, {
           playerUrl: selected?.iframe || '',
-          providers
+          providers,
+          signal
         })
+        if (Object.keys(players).length) return players
+        console.warn('[movies.kinobd] /playerdata пуст, проверяем iframe из поиска')
       } catch (error) {
+        if (signal?.aborted) throw error
         console.warn('[movies.kinobd] /playerdata failed, fallback to iframe list', error)
       }
     }
