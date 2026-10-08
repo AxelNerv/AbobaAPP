@@ -3,16 +3,27 @@ import { getKpInfo, getPlayers } from '@/api/movies'
 import * as fbp from '@/api/movies.fbp'
 import * as kinobd from '@/api/movies.kinobd'
 import * as kinobox from '@/api/movies.kinobox'
+import * as catalog from '@/api/movies.catalog'
 
 vi.mock('@/api/movies.fbp', () => ({ getPlayers: vi.fn(), getKpInfo: vi.fn() }))
 vi.mock('@/api/movies.kinobd', () => ({ getPlayers: vi.fn(), getKpInfo: vi.fn() }))
 vi.mock('@/api/movies.kinobox', () => ({ getPlayers: vi.fn() }))
+vi.mock('@/api/movies.catalog', () => ({ getKpInfo: vi.fn() }))
 vi.mock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async (rows) => rows }))
 vi.mock('@/api/movies.tmdb', () => ({ enrichMissingFields: async (movie) => movie }))
 
 describe('независимый источник фильмов и плееров', () => {
-  beforeEach(() => vi.resetAllMocks())
+  beforeEach(() => {
+    vi.resetAllMocks()
+    catalog.getKpInfo.mockRejectedValue(new Error('catalogue unavailable'))
+  })
   afterEach(() => vi.useRealTimers())
+
+  it('полная карточка берётся из каталога независимо от источника видео', async () => {
+    catalog.getKpInfo.mockResolvedValue({ kp_id: '687595', name_ru: 'Кухня', description: 'Описание' })
+    expect(await getKpInfo('687595')).toMatchObject({ description: 'Описание' })
+    expect(fbp.getKpInfo).not.toHaveBeenCalled()
+  })
 
   it('показывает рабочий плеер без ожидания недоступного KinoBD', async () => {
     fbp.getPlayers.mockResolvedValue({ Collaps: { iframe: 'https://api.nextembed.ws/embed/movie/14' } })

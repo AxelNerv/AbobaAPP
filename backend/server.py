@@ -20,6 +20,8 @@ from typing import Optional
 
 import aiohttp
 from movie_sources import MovieSources, SourceUnavailable
+from movie_search import MovieSearch
+from movie_catalog import MovieCatalog
 import sync
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -436,6 +438,45 @@ async def _get_session_for(provider: str) -> aiohttp.ClientSession:
 
 
 _movie_sources = MovieSources()
+_movie_search = MovieSearch()
+_movie_catalog = MovieCatalog()
+
+
+async def _catalog_response(call):
+    try:
+        return {"data": await call}
+    except ValueError:
+        raise HTTPException(400, "Invalid catalogue parameters")
+    except SourceUnavailable as error:
+        print(f"[catalogue] {error}")
+        raise HTTPException(502, "Movie catalogue unavailable")
+
+
+@app.get("/catalog/search")
+async def catalog_search(q: str, page: int = 1):
+    return await _catalog_response(_movie_catalog.search(q, page, await _get_http_session()))
+
+
+@app.get("/catalog/popular")
+async def catalog_popular(type_filter: str = "all", page: int = 1, limit: int = 100):
+    return await _catalog_response(_movie_catalog.popular(type_filter, page, limit, await _get_http_session()))
+
+
+@app.get("/catalog/movie/{kp_id}")
+async def catalog_movie(kp_id: str):
+    return await _catalog_response(_movie_catalog.details(kp_id, await _get_http_session()))
+
+
+@app.get("/movies/search")
+async def movie_search(q: str, page: int = 1):
+    """Runs locally in the desktop backend; no VPS or API key is required."""
+    try:
+        return {"data": await _movie_search.search(q, page, await _get_http_session())}
+    except ValueError:
+        raise HTTPException(400, "Invalid movie search")
+    except SourceUnavailable as error:
+        print(f"[search] {error}")
+        raise HTTPException(502, f"Movie search unavailable: {error}")
 
 
 @app.get("/player/sources/{kp_id}")

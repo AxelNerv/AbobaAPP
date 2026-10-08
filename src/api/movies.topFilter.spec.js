@@ -53,6 +53,7 @@ describe('подмена заготовленным каталогом', () => {
     vi.doMock('@/store/main', () => ({ useMainStore: () => { throw new Error('no pinia') } }))
     vi.doMock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async (rows) => rows }))
     vi.doMock('@/api/movies.kinobox', () => ({}))
+    vi.doMock('@/api/movies.catalog', () => ({ getMovies: vi.fn().mockRejectedValue(new Error('catalogue unavailable')) }))
     vi.doMock('@/api/movies.kinobd', () => ({ getMovies: (...a) => kinobdGetMovies(...a) }))
     vi.doMock('@/data/movies.json', () => ({ default: [{ kp_id: 'заготовка' }] }))
   })
@@ -66,7 +67,9 @@ describe('подмена заготовленным каталогом', () => {
   it('с фильтром сбой источника — ошибка, а не подмена', async () => {
     kinobdGetMovies.mockRejectedValue(new Error('kinobd упал'))
     const { getMovies } = await import('@/api/movies')
-    await expect(getMovies({ typeFilter: 'movie', limit: 10 })).rejects.toThrow('kinobd упал')
+    await expect(getMovies({ typeFilter: 'movie', limit: 10 })).rejects.toMatchObject({
+      allSourcesDown: true, details: expect.arrayContaining([expect.stringContaining('kinobd упал')])
+    })
   })
 
   it('без фильтра при сбое главная всё равно открывается с заготовкой', async () => {

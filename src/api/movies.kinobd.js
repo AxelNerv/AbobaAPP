@@ -420,14 +420,16 @@ const getPlayerDataByInid = async (
 // но отдаёт по строке на каждый плеер — один фильм повторяется много раз.
 // Поэтому он идёт вторым и только чтобы дополнить: схлопываем дубли по
 // kinopoisk_id и добавляем то, чего не было в основной выдаче.
-const searchByAlternativeTitles = async (searchTerm, page) => {
+const searchByAlternativeTitles = async (searchTerm, page, { signal } = {}) => {
   const { data } = await apiCall((api) =>
     api.get('/api/player/search', {
+      signal,
       params: { q: searchTerm, type: 'title', page }
     })
   )
 
-  const rows = Array.isArray(data?.data) ? data.data : []
+  if (!Array.isArray(data?.data) || data.error) throw new Error('Некорректный ответ дополнительного поиска KinoBD')
+  const rows = data.data
   const uniqueByKpId = new Map()
 
   for (const row of rows) {
@@ -439,34 +441,25 @@ const searchByAlternativeTitles = async (searchTerm, page) => {
   return Array.from(uniqueByKpId.values())
 }
 
-const apiSearch = async (searchTerm, page = 1) => {
-  const { data } = await apiCall((api) =>
-    api.get('/api/films/search/title', {
-      params: {
-        q: searchTerm,
-        page
-      }
-    })
-  )
-
-  const rows = Array.isArray(data?.data) ? data.data : []
-  const seenKpIds = new Set(rows.map((r) => r?.kinopoisk_id).filter(Boolean))
-
-  // Широкий поиск подключаем всегда: даже когда по основному названию
-  // что-то нашлось, нужного фильма среди этого может не быть.
-  try {
-    const extra = await searchByAlternativeTitles(searchTerm, page)
-    for (const row of extra) {
-      if (seenKpIds.has(row.kinopoisk_id)) continue
-      seenKpIds.add(row.kinopoisk_id)
-      rows.push(row)
-    }
-  } catch (error) {
-    // Дополнительный поиск не критичен — основную выдачу не роняем
-    console.warn('[kinobd] поиск по альтернативным названиям не удался:', error?.message)
+const apiSearch = async (searchTerm, page = 1, { signal } = {}) => {
+  const primarySearch = async () => {
+    const { data } = await apiCall((api) => api.get('/api/films/search/title', {
+      signal, params: { q: searchTerm, page }
+    }))
+    if (!Array.isArray(data?.data) || data.error) throw new Error('Некорректный ответ поиска KinoBD')
+    return data.data
   }
-
-  return rows.map(buildLegacyMovie)
+  // Either search can succeed independently; both failing is not an empty result.
+  const results = await Promise.allSettled([primarySearch(), searchByAlternativeTitles(searchTerm, page, { signal })])
+  if (signal?.aborted) throw signal.reason
+  if (results.every(result => result.status === 'rejected')) throw results[0].reason
+  const rows = []
+  for (const result of results) {
+    if (result.status === 'fulfilled') rows.push(...result.value)
+    else console.warn('[kinobd] один из запросов поиска не удался:', result.reason?.message)
+  }
+  const uniqueRows = rows.filter((row, index) => row?.kinopoisk_id && rows.findIndex(item => String(item?.kinopoisk_id) === String(row.kinopoisk_id)) === index)
+  return uniqueRows.map(buildLegacyMovie)
 }
 
 const getKpInfo = async (kpId, { signal } = {}) => {

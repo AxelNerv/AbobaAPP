@@ -126,7 +126,7 @@ import { USER_LIST_TYPES_ENUM } from '@/constants'
 import { hasConsecutiveConsonants, suggestLayout, convertLayout } from '@/utils/keyboardLayout'
 import { normalizeBasePath } from '@/utils/basePath'
 import debounce from 'lodash.debounce'
-import { onMounted, onServerPrefetch, ref, watch, computed } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'
@@ -151,11 +151,8 @@ const errorMessage = ref('')
 const errorCode = ref(null)
 const isMobile = computed(() => mainStore.isMobile)
 const history = ref([])
-// Сколько фильмов показываем на главной. Было 500 — один запрос, но тяжёлый
-// ответ, а от таких источник охотнее уходит в rate-limit.
-// 100 — ровно одна страница выдачи kinobd (per_page по умолчанию), то есть
-// столько же данных за тот же единственный запрос. Показываем все сразу,
-// без кнопки и постраничности.
+// Показываем сразу 100 карточек: 50 популярных фильмов и 50 сериалов.
+// Бэкенд кеширует списки; дополнительных запросов на каждую карточку нет.
 const TOP_BUFFER_LIMIT = 100
 
 // Полный буфер, загружается один раз и целиком уходит в разметку
@@ -171,6 +168,8 @@ const randomMovie = ref(null)
 const randomLoading = ref(false)
 const randomError = ref('')
 const searchRequestGuard = createLatestRequestGuard()
+let searchController = null
+let searchDisposed = false
 
 const searchInput = ref(null)
 const siteOrigin = import.meta.env.VITE_SITE_ORIGIN || ''
@@ -226,7 +225,7 @@ useHead({
   ]
 })
 
-const TOP_CACHE_KEY = 'abobatv_top_cache_v3'
+const TOP_CACHE_KEY = 'abobatv_top_cache_v4'
 const TOP_CACHE_TTL = 10 * 60 * 1000 // 10 минут
 
 const loadTopFromCache = () => {
@@ -258,7 +257,7 @@ const loadHomeTopMovies = async () => {
     allTopMoviesBuffer.value = cached.data
     topMoviesLoading.value = false
     // Фоном обновляем, не блокируя UI
-    // Используем 'all' чтобы получить максимум фильмов (24h даёт ~30, all даёт 200+)
+    // Запрашиваем общий список фильмов и сериалов у первого доступного источника.
     getMovies({ activeTime: 'all', typeFilter: 'all', limit: TOP_BUFFER_LIMIT })
       .then((fresh) => {
         if (fresh?.length) {
@@ -368,7 +367,10 @@ const getPlaceholder = () => {
 
 // Очистка поиска
 const resetSearch = () => {
+  searchController?.abort()
+  debouncedPerformSearch.cancel()
   searchRequestGuard.invalidate()
+  loading.value = false
   searchTerm.value = ''
   movies.value = []
   searchPerformed.value = false
@@ -388,6 +390,11 @@ const search = () => {
 }
 
 const performSearch = async () => {
+  if (searchDisposed) return
+  debouncedPerformSearch.cancel()
+  searchController?.abort()
+  const controller = new AbortController()
+  searchController = controller
   const request = searchRequestGuard.begin()
   const requestedType = searchType.value
   const requestedTerm = searchTerm.value
@@ -425,7 +432,7 @@ const performSearch = async () => {
     }
 
     if (requestedType === 'title') {
-      const response = await apiSearch(requestedTerm)
+      const response = await apiSearch(requestedTerm, 1, { signal: controller.signal })
       if (!isCurrentSearch()) return
       movies.value = response.map((movie) => ({
         ...movie,
@@ -435,13 +442,20 @@ const performSearch = async () => {
       }))
     }
   } catch (error) {
-    if (!isCurrentSearch()) return
+    if (!isCurrentSearch() || controller.signal.aborted) return
+    if (error?.allSourcesDown) {
+      errorMessage.value = 'Поиск временно недоступен: источники не отвечают. Попробуйте позже.'
+      errorCode.value = 503
+      console.error('Источники поиска недоступны:', error.details)
+      return
+    }
     const { message, code } = handleApiError(error)
     errorMessage.value = message
     errorCode.value = code
     console.error('Ошибка при поиске:', error)
   } finally {
     if (searchRequestGuard.isCurrent(request)) loading.value = false
+    if (searchController === controller) searchController = null
   }
 }
 
@@ -454,14 +468,25 @@ const debouncedPerformSearch = debounce(() => {
   }
 }, 700)
 
+onBeforeUnmount(() => {
+  searchDisposed = true
+  searchController?.abort()
+  debouncedPerformSearch.cancel()
+  searchRequestGuard.invalidate()
+})
+
 onMounted(async () => {
   if (!topMovies.value.length) {
     await loadHomeTopMovies()
   }
+  if (searchDisposed) return
   const hash = window.location.hash
   if (hash.startsWith('#search=')) {
     const searchQuery = decodeURIComponent(hash.replace('#search=', ''))
     searchTerm.value = searchQuery
+    // Let the input watcher run before starting, so it cannot abort this same
+    // hash-triggered request or schedule a second identical lookup.
+    await nextTick()
     performSearch()
   } else if (hash.startsWith('#imdb=')) {
     const imdbId = decodeURIComponent(hash.replace('#imdb=', ''))
@@ -477,6 +502,7 @@ watch(searchTerm, (term) => {
   if (searchType.value !== 'title') {
     return
   }
+  searchController?.abort()
   if (term.length < 2) {
     debouncedPerformSearch.cancel()
     searchRequestGuard.invalidate()

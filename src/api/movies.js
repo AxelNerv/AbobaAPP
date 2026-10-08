@@ -3,6 +3,8 @@ import * as kinobd from '@/api/movies.kinobd'
 import * as kinobox from '@/api/movies.kinobox'
 import * as fbp from '@/api/movies.fbp'
 import * as tmdb from '@/api/movies.tmdb'
+import * as wikidata from '@/api/movies.wikidata'
+import * as catalog from '@/api/movies.catalog'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 import { runSourceChain } from '@/api/sourceChain'
 
@@ -68,8 +70,15 @@ const callWithProvider = async (methodName, ...args) => {
   throw new Error(`Unsupported movie API method: ${methodName}`)
 }
 
-const apiSearch = async (...args) => {
-  const data = await kinobd.apiSearch(...args)
+const apiSearch = async (term, page = 1, { signal } = {}) => {
+  const query = String(term || '').trim()
+  if (query.length < 2) return []
+  const data = await runSourceChain([
+    { name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.apiSearch(query, page, { signal }) },
+    { name: 'Wikidata', timeoutMs: 12000, run: signal => wikidata.apiSearch(query, page, { signal }) },
+    { name: 'KinoBD', timeoutMs: 8000, run: signal => kinobd.apiSearch(query, page, { signal }) }
+  ], { label: 'apiSearch', isUsable: rows => Array.isArray(rows) && rows.length > 0,
+    isEmpty: rows => Array.isArray(rows) && rows.length === 0, emptyResult: [], signal })
   return await normalizeMovieListResponse(data)
 }
 /**
@@ -121,9 +130,10 @@ const getKpInfo = async (kpId, _token, { signal } = {}) => {
     !!(d && (d.kpId || d.kp_id || d.nameRu || d.nameOriginal || d.title))
 
   const data = await runSourceChain(
-    MOVIE_SOURCES.filter(source => source.info).map(source => ({
+    [{ name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.getKpInfo(kpId, { signal }) },
+      ...MOVIE_SOURCES.filter(source => source.info).map(source => ({
       ...source, run: attemptSignal => source.info(kpId, { signal: attemptSignal })
-    })),
+    }))],
     { label: 'getKpInfo', isUsable: isGoodInfo, signal }
   )
 
@@ -154,10 +164,16 @@ const getMovies = async (...args) => {
   const typeFilter = args?.[0]?.typeFilter || 'all'
   let rows
   try {
-    rows = await kinobd.getMovies(...args)
+    rows = await runSourceChain([
+      { name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.getMovies({ ...args[0], signal }) },
+      { name: 'KinoBD', timeoutMs: 8000, run: () => kinobd.getMovies(...args) }
+    ], { label: 'getMovies', isUsable: hasRows, isEmpty: rows => Array.isArray(rows) && !rows.length,
+      emptyResult: [], signal: args[0]?.signal })
     // С фильтром пустой список — честный ответ, а не авария: подменять его нельзя.
-    if (typeFilter === 'all' && !hasRows(rows)) throw new Error('kinobd returned an empty list')
+    if (typeFilter === 'all' && !hasRows(rows)) throw new Error('Источники вернули пустой каталог')
   } catch (error) {
+    if (args[0]?.signal?.aborted) throw error
+    console.warn('[movies] Не удалось обновить каталог:', error.message)
     // Главная должна открываться даже при полном падении внешних каталогов.
     // Но в заготовке нет типов: отдать её на «Фильмы» или «Сериалы» значит
     // показать чужой список без единого слова об ошибке. С фильтром — ошибка.
@@ -169,14 +185,9 @@ const getMovies = async (...args) => {
   }
   return await normalizeMovieListResponse(rows, { enrichMissingSeo: false })
 }
-// Пагинированный топ для бесконечного скролла главной.
-// Идёт напрямую через kinobd (rhserv пагинацию не поддерживает).
-// Страница 1 не используется — там работает быстрый getMovies с кешем.
+// Сохраняем общий каталог и порядок источников для постраничных потребителей.
 const getMoviesPaginated = async ({ page = 2, typeFilter = 'all' } = {}) => {
-  const rows = await kinobd.getMovies({ activeTime: '24h', typeFilter, page })
-  // enrichMissingSeo отключён — он делает по запросу на каждый фильм (50 шт на страницу)
-  // и убивает скорость. Для бесконечного скролла достаточно данных от kinobd.
-  return await normalizeMovieListResponse(rows, { enrichMissingSeo: false })
+  return getMovies({ typeFilter, page, limit: 100 })
 }
 const getKpIDfromIMDB = async (...args) => callWithProvider('getKpIDfromIMDB', ...args)
 const getRandomMovie = async (...args) => callWithProvider('getRandomMovie', ...args)
