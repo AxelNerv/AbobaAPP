@@ -64,6 +64,21 @@ describe('общая загрузка информации и плееров', (
     expect(Object.values(await getPlayers('687595')).map(p => p.provider)).toEqual(['Turbo', 'Collaps'])
   })
 
+  it('добавляет независимый Veoveo и сохраняет только русские переводы', async () => {
+    const { getPlayers } = await import('@/api/movies.fbp')
+    httpGet.mockResolvedValue({ data: { kp_id: '10453010', providers: [
+      { type: 'Turbo', iframeUrl: 'https://x.obrut.show/embed/film' },
+      { type: 'Veoveo', iframeUrl: 'https://kurolesya.link/balancer-api/iframe', translations: [
+        { name: 'Русский. Дубляж. Ultradox', iframeUrl: 'https://kurolesya.link/russian' },
+        { name: 'Английский. Оригинал', iframeUrl: 'https://kurolesya.link/english' }
+      ] }
+    ] } })
+    const result = Object.values(await getPlayers('10453010'))
+    expect(result.map(p => p.provider)).toEqual(['Turbo', 'Veoveo', 'Veoveo'])
+    expect(result.find(p => p.translate.includes('Ultradox'))).toBeDefined()
+    expect(result.some(p => p.iframe.includes('/english'))).toBe(false)
+  })
+
   it('отмена плеера не отменяет общий запрос названия фильма', async () => {
     const { getPlayers, getKpInfo } = await import('@/api/movies.fbp')
     let finish

@@ -1,5 +1,6 @@
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 import { getBackendUrl } from './backendUrl'
+import { libraryRequest as listFetch, parseLibraryItems, requireLibraryAck } from './libraryRequest'
 
 // ──────────────────────────────────────────────
 // Списки (избранное / история) — идут на НАШ бэкенд
@@ -11,75 +12,30 @@ import { getBackendUrl } from './backendUrl'
 // Теперь функции списков ходят на наш FastAPI-бэкенд напрямую через fetch
 // с Bearer-токеном из authStore. На rhserv ничего не уходит.
 
-// Достаём токен из persisted-стора (он сохраняется через pinia-plugin-persistedstate в localStorage)
-const getAuthToken = () => {
-  try {
-    if (typeof window === 'undefined') return null
-    // Pinia persisted store кладёт стор в localStorage под ключом имени стора
-    const raw = localStorage.getItem('auth')
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    return parsed?.token || null
-  } catch {
-    return null
-  }
-}
-
-const listFetch = async (path, options = {}) => {
-  const token = getAuthToken()
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {})
-  }
-  if (token) headers.Authorization = `Bearer ${token}`
-
-  const response = await fetch(`${getBackendUrl()}${path}`, {
-    ...options,
-    headers
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    const err = new Error(`HTTP ${response.status}: ${text || response.statusText}`)
-    err.status = response.status
-    throw err
-  }
-
-  // 204 No Content или пустое тело
-  if (response.status === 204) return null
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('json')) return null
-  return await response.json()
-}
-
 const addToList = async (id, type, movie = null) => {
   // На бэк (server.py PUT /list/{type}/{id}) отправляем сам объект фильма,
   // чтобы при последующем чтении списка карточка рисовалась без дозапросов.
   // movie — это объект с полями id, kp_id, title, poster, year, type, ratings.
   // Если не передан — отправляем минимум {kp_id: id}.
   const body = { movie: movie || { kp_id: id } }
-  return await listFetch(`/list/${type}/${id}`, {
+  return requireLibraryAck(await listFetch(`/list/${type}/${id}`, {
     method: 'PUT',
     body: JSON.stringify(body)
-  })
+  }))
 }
 
 const delFromList = async (id, type) => {
-  return await listFetch(`/list/${type}/${id}`, { method: 'DELETE' })
+  return requireLibraryAck(await listFetch(`/list/${type}/${id}`, { method: 'DELETE' }))
 }
 
 const delAllFromList = async (type) => {
-  return await listFetch(`/list/${type}`, { method: 'DELETE' })
+  return requireLibraryAck(await listFetch(`/list/${type}`, { method: 'DELETE' }))
 }
 
 const getMyLists = async (type) => {
   const data = await listFetch(`/list/${type}`)
   // Наш сервер отдаёт {items: [...]}. Нормализатор ждёт сам массив.
-  const items = Array.isArray(data?.items)
-    ? data.items
-    : Array.isArray(data)
-      ? data
-      : []
+  const items = parseLibraryItems(data)
   return await normalizeMovieListResponse(items, { enrichMissingSeo: false })
 }
 
@@ -116,16 +72,29 @@ const getTGAuthResult = async (token) => {
 
 // Синхронизация библиотеки с сервером входа: локальный бэкенд делает обмен сам,
 // интерфейс только просит «сейчас» и показывает состояние.
-const syncNow = async () => await listFetch('/sync/now', { method: 'POST' })
+const readSyncStatus = (data) => {
+  if (typeof data?.enabled !== 'boolean' || !Number.isInteger(data.pending) || data.pending < 0) {
+    throw new Error('Сервер вернул некорректный статус синхронизации')
+  }
+  return data
+}
+const syncNow = async () => readSyncStatus(await listFetch('/sync/now', { method: 'POST' }, 45000))
 
 const importLibrary = async (data) =>
-  await listFetch('/import/library', { method: 'POST', body: JSON.stringify(data) })
+  requireLibraryAck(await listFetch('/import/library', { method: 'POST', body: JSON.stringify(data) }))
 
 // Серия и таймкод по фильму. payload хранится как есть, формат задаёт плеер.
-const getWatchProgress = async (kpId) => await listFetch(`/progress/${encodeURIComponent(kpId)}`)
+const getWatchProgress = async (kpId) => {
+  const data = await listFetch(`/progress/${encodeURIComponent(kpId)}`)
+  if (!Object.hasOwn(data, 'payload') || (data.payload !== null &&
+    (typeof data.payload !== 'object' || Array.isArray(data.payload)))) {
+    throw new Error('Сервер вернул некорректную позицию просмотра')
+  }
+  return data
+}
 const saveWatchProgress = async (kpId, payload) =>
-  await listFetch(`/progress/${encodeURIComponent(kpId)}`, { method: 'PUT', body: JSON.stringify({ payload }) })
-const getSyncStatus = async () => await listFetch('/sync/status')
+  requireLibraryAck(await listFetch(`/progress/${encodeURIComponent(kpId)}`, { method: 'PUT', body: JSON.stringify({ payload }) }))
+const getSyncStatus = async () => readSyncStatus(await listFetch('/sync/status'))
 
 export {
   addToList,

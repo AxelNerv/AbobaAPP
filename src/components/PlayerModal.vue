@@ -1,323 +1,318 @@
 <template>
-  <div class="modal" @click.self="$emit('close')">
-    <div class="modal-content" @click.stop>
-      <button class="close" @click="$emit('close')">&times;</button>
+  <Teleport to="body">
+    <dialog
+      ref="dialog"
+      class="player-dialog"
+      :aria-labelledby="titleId"
+      aria-modal="true"
+      @cancel.prevent="emit('close')"
+      @keydown.esc.stop.prevent="emit('close')"
+      @click="onBackdropClick"
+    >
+      <header class="dialog-header">
+        <div class="dialog-heading">
+          <h2 :id="titleId">Источники видео</h2>
+          <p>{{ movieTitle || 'Выберите плеер для просмотра' }}</p>
+        </div>
+        <button
+          type="button"
+          class="close-button"
+          aria-label="Закрыть выбор источника"
+          @click="emit('close')"
+        >
+          <AppIcon name="close" :size="20" />
+        </button>
+      </header>
 
-      <h2 v-if="!activeGroup">Выберите плеер</h2>
-      <h2 v-else>
-        <button class="back-btn" @click="collapseGroup">← Назад</button>
-        {{ activeGroup }}
-      </h2>
-
-      <ul class="players-list">
-        <template v-if="!activeGroup">
-          <li v-for="item in mixedPlayersList" :key="item.type === 'player' ? item.data.key : item.name">
-            <button
-              v-if="item.type === 'player'"
-              :class="['player-item', { active: isSelected(item.data) }]"
-              :title="item.data.translate && item.data.translate !== formatPlayerLabel(item.data) ? item.data.translate : undefined"
-              @click="selectPlayer(item.data)"
-            >
-              {{ formatPlayerLabel(item.data) }}
-              <span v-if="item.data.uhd" class="uhd-badge" title="Есть 2160p и 1440p">4K</span>
-              <AppIcon v-if="item.data.warning" name="warning" :size="15" class="warning-icon" title="Внимание!" />
-            </button>
-            <button
-              v-else
-              :class="['group-item', { active: isGroupSelected(item.name) }]"
-              @click="expandGroup(item.name)"
-            >
-              <AppIcon name="folder" :size="16" class="group-icon" />
-              {{ item.displayName }}
-              <AppIcon
-                v-if="groupHasWarning(item.name)"
-                name="warning"
-                :size="15"
-                class="warning-icon"
-                title="Внимание!"
-              />
-            </button>
-          </li>
-        </template>
-        <template v-else>
-          <li v-for="player in groupPlayers(activeGroup)" :key="player.key">
-            <button
-              :class="['player-item', { active: isSelected(player) }]"
-              :title="player.translate && player.translate !== formatPlayerLabel(player) ? player.translate : undefined"
-              @click="selectPlayer(player)"
-            >
-              {{ formatPlayerLabel(player) }}
-              <span v-if="player.uhd" class="uhd-badge" title="Есть 2160p и 1440p">4K</span>
-              <AppIcon v-if="player.warning" name="warning" :size="15" class="warning-icon" title="Внимание!" />
-            </button>
-          </li>
-        </template>
+      <ul v-if="players.length" class="source-options" aria-label="Доступные плееры">
+        <li v-for="player in players" :key="player.key">
+          <button
+            type="button"
+            class="player-item"
+            :class="{ selected: isSelected(player) }"
+            :aria-pressed="isSelected(player)"
+            :data-player-key="player.key"
+            @click="selectPlayer(player)"
+          >
+            <span class="source-icon"><AppIcon name="screen" :size="20" /></span>
+            <span class="source-copy">
+              <span class="source-name"
+                >{{ playerLabel(player) }}
+                <span v-if="player.uhd" class="quality-badge">4K</span></span
+              >
+              <span class="source-description">{{ playerDescription(player) }}</span>
+            </span>
+            <span v-if="isSelected(player)" class="selection-mark"
+              ><span>Выбран</span><AppIcon name="check" :size="18"
+            /></span>
+            <AppIcon v-else-if="player.warning" name="warning" :size="18" class="warning-icon" />
+            <AppIcon v-else name="forward" :size="17" class="option-arrow" />
+          </button>
+        </li>
       </ul>
-    </div>
-  </div>
+      <p v-else class="empty-state" role="status">Для этого фильма пока нет доступных плееров.</p>
+      <footer>Если видео не запускается, попробуйте другой источник.</footer>
+    </dialog>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 
 const props = defineProps({
-  players: {
-    type: Array,
-    required: true
-  },
-  selectedPlayer: {
-    type: Object,
-    default: null
-  }
+  players: { type: Array, required: true },
+  selectedPlayer: { type: Object, default: null },
+  movieTitle: { type: String, default: '' }
 })
 const emit = defineEmits(['close', 'select'])
+const dialog = ref(null)
+const titleId = useId()
+let previousFocus = null
+let previousOverflow = ''
 
-const activeGroup = ref(null)
-
-const mixedPlayersList = computed(() => {
-  const result = []
-  const seenGroups = new Set()
-  
-  for (const player of props.players) {
-    if (isVeoVeo(player)) {
-      if (!seenGroups.has('veoveo')) {
-        result.push({ type: 'group', name: 'veoveo', displayName: 'VeoVeo' })
-        seenGroups.add('veoveo')
-      }
-    } else if (isKodik(player)) {
-      if (!seenGroups.has('kodik')) {
-        result.push({ type: 'group', name: 'kodik', displayName: 'Kodik' })
-        seenGroups.add('kodik')
-      }
-    } else {
-      result.push({ type: 'player', data: player })
-    }
-  }
-  
-  return result
-})
-
-
-
-const isVeoVeo = (player) => player.name.toUpperCase().includes('VEOVEO')
-const isKodik = (player) => player.name.toUpperCase().includes('KODIK')
-
-const cleanName = (name) =>
-  String(name || '')
-    .replace(/VEOVEO>/, '')
-    .replace(/KODIK>/, '')
-    .replace(/KINOBOX>/, '')
-    .trim()
-
-const getProviderName = (player) => {
-  const directProvider = String(player?.provider || '').trim()
-  if (directProvider) return cleanName(directProvider)
-
-  const rawName = String(player?.name || player?.key || '')
-  // Плееры из /playerdata kinobd называются просто ключом: «ALLOHA», «COLLAPS».
-  // Раньше здесь возвращалась пустота, и подпись бралась из строки озвучек —
-  // вместо «ALLOHA» в списке стояло «Украинский, Дубляж Red Head Sound, …».
-  if (!rawName.includes('>')) return cleanName(rawName)
-
-  const segments = rawName
+const playerLabel = (player) => {
+  const provider = String(player.provider || '').trim()
+  if (provider) return provider
+  const parts = String(player.name || player.key || '')
     .split('>')
-    .map((segment) => segment.trim())
     .filter(Boolean)
-  if (!segments.length) return ''
+  return /^(KINOBOX|KINOBD|RHSERV)$/i.test(parts[0]) ? parts[1] || 'Плеер' : parts[0] || 'Плеер'
+}
 
-  const root = segments[0].toUpperCase()
-  if ((root === 'KINOBOX' || root === 'KINOBD' || root === 'RHSERV') && segments[1]) {
-    return cleanName(segments[1])
+const playerDescription = (player) => {
+  const translation = String(player.translate || '').trim()
+  if (translation && translation.toLowerCase() !== playerLabel(player).toLowerCase())
+    return translation
+  const descriptions = {
+    turbo: 'Основной плеер',
+    collaps: 'Альтернативный видеопоток',
+    veoveo: 'Дополнительный источник'
   }
-
-  return cleanName(segments[0])
+  return descriptions[playerLabel(player).toLowerCase()] || 'Другой вариант просмотра'
 }
 
-const formatPlayerLabel = (player) => {
-  const provider = getProviderName(player)
-  return provider || cleanName(player?.translate) || 'Плеер'
-}
-
+const isSelected = (player) => props.selectedPlayer?.key === player.key
 const selectPlayer = (player) => {
   emit('select', player)
   emit('close')
 }
-
-const isSelected = (player) => props.selectedPlayer && props.selectedPlayer.key === player.key
-
-const isGroupSelected = (group) => {
-  if (!props.selectedPlayer) return false
-  return (
-    (group === 'veoveo' && isVeoVeo(props.selectedPlayer)) ||
-    (group === 'kodik' && isKodik(props.selectedPlayer))
+const onBackdropClick = (event) => {
+  if (event.target !== dialog.value) return
+  const box = dialog.value.getBoundingClientRect()
+  if (
+    event.clientX < box.left ||
+    event.clientX > box.right ||
+    event.clientY < box.top ||
+    event.clientY > box.bottom
   )
+    emit('close')
 }
 
-const expandGroup = (group) => {
-  activeGroup.value = group
-}
-const collapseGroup = () => {
-  activeGroup.value = null
-}
-const groupPlayers = (group) => {
-  let players = props.players.filter(
-    (player) => (group === 'veoveo' && isVeoVeo(player)) || (group === 'kodik' && isKodik(player))
-  )
+onMounted(() => {
+  previousFocus = document.activeElement
+  previousOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  dialog.value.showModal()
+  dialog.value.querySelector('[aria-pressed="true"]')?.focus()
+})
 
-  if (group === 'kodik') {
-    return players.sort((a, b) => formatPlayerLabel(a).localeCompare(formatPlayerLabel(b)))
-  }
-
-  return players
-}
-const groupHasWarning = (group) => groupPlayers(group).some((player) => player.warning)
+onBeforeUnmount(() => {
+  dialog.value?.close()
+  document.body.style.overflow = previousOverflow
+  if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
+})
 </script>
 
 <style scoped>
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.player-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  color: var(--text-color);
+  background: var(--bg-modal);
+  border: 1px solid var(--border-hover);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+  color-scheme: dark;
+}
+.player-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(2px);
+}
+.dialog-header {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 100;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 16px 16px 24px;
 }
-
-.modal-content {
-  background: rgba(8, 8, 8, 0.96);
-  /* Минималистичная рамка как у модалки поиска (rgba 0.22) — без неонового свечения вокруг.
-     Раньше было border: 1px solid var(--accent-color) + box-shadow: var(--neon-glow),
-     что давало "двойное" жирное свечение. */
-  border: 1px solid rgba(var(--accent-rgb), 0.22);
-  padding: 18px 16px;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 340px;
-  max-height: 70vh;
-  overflow-y: auto;
-  color: #fff;
-  position: relative;
+.dialog-heading {
+  min-width: 0;
 }
-
-.modal-content::-webkit-scrollbar { width: 3px; }
-.modal-content::-webkit-scrollbar-track { background: transparent; }
-.modal-content::-webkit-scrollbar-thumb { background: var(--accent-color); border-radius: 4px; }
-
-.close {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  border: none;
-  background: transparent;
-  color: rgba(255,255,255,0.4);
-  font-size: 1.4rem;
-  cursor: pointer;
-  transition: color 0.2s;
-  line-height: 1;
-}
-.close:hover { color: var(--accent-color); }
-
 h2 {
-  margin: 0 0 12px 0;
-  font-size: 0.95rem;
-  font-weight: 600;
+  margin: 2px 0 6px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+.dialog-heading p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.close-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin-top: -4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.close-button:hover {
+  color: var(--text-color);
+  background: var(--bg-card);
+}
+.source-options {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+}
+.player-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 76px;
+  padding: 12px;
+  box-sizing: border-box;
+  text-align: left;
+  color: var(--text-color);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 160ms,
+    background-color 160ms;
+}
+.player-item:hover {
+  border-color: var(--border-hover);
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.player-item.selected {
+  border-color: var(--accent-color);
+  background: rgba(var(--accent-rgb), 0.07);
+}
+.source-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-secondary);
+}
+.selected .source-icon {
   color: var(--accent-color);
-  /* лёгкая cyan-подсветка текста вместо жёсткого неонового свечения */
-  text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.25);
+  border-color: rgba(var(--accent-rgb), 0.2);
+}
+.source-copy {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.source-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.source-description {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.selection-mark {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--accent-color);
 }
-
-.back-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-right: 6px;
-  cursor: pointer;
-  transition: color 0.2s;
+.option-arrow {
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
-.back-btn:hover { color: var(--accent-color); }
-
-.players-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.uhd-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 6px;
-  padding: 1px 5px;
+.quality-badge {
+  padding: 2px 5px;
   border-radius: 4px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.4;
-  vertical-align: middle;
-  color: #0a0e1a;
-  background: var(--accent-color, #00e5ff);
-}
-
-.player-item,
-.group-item {
-  width: 100%;
-  text-align: left;
-  padding: 7px 11px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s ease;
-}
-
-.player-item:hover,
-.group-item:hover {
-  border-color: var(--accent-color);
   color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.08);
-  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.15);
+  background: rgba(var(--accent-rgb), 0.12);
 }
-
-.player-item.active,
-.group-item.active {
-  /* Активный плеер выделен только cyan-обводкой и подсветкой текста.
-     Неоновое свечение убрано чтобы было аккуратнее (как стиль модалки поиска). */
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.08);
-}
-
 .warning-icon {
-  font-size: 0.95rem;
   color: var(--warning-color);
-  margin-left: 8px;
+  flex-shrink: 0;
 }
-
-.group-icon {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  margin-right: 8px;
+footer {
+  padding: 16px 24px 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
-
+.empty-state {
+  padding: 12px 24px;
+  color: var(--text-secondary);
+}
+button:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
+}
 @media (max-width: 480px) {
-  .modal-content { max-width: 95%; padding: 14px 12px; }
+  .dialog-header {
+    padding-left: 20px;
+  }
+  h2 {
+    font-size: 19px;
+  }
+  .source-options {
+    padding: 0 12px;
+  }
+  .selection-mark span {
+    display: none;
+  }
+  .player-item {
+    gap: 10px;
+  }
+  footer {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-item {
+    transition: none;
+  }
 }
 </style>
-

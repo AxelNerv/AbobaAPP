@@ -87,4 +87,32 @@ describe('ожидание резервных источников в интер
     expect(vi.getTimerCount()).toBe(0)
     wrapper = null
   })
+
+  it('новый резерв виден в выборе, но не вытесняет Turbo по умолчанию', async () => {
+    getPlayers.mockResolvedValue({
+      Veoveo: { iframe: 'https://kurolesya.link/film', provider: 'Veoveo', source: 'fbp' },
+      Turbo: { iframe: 'https://x.obrut.show/embed/film', provider: 'Turbo', source: 'fbp' }
+    })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('iframe').attributes('src')).toContain('obrut.show')
+    await wrapper.find('.player-btn').trigger('click')
+    const modal = wrapper.findComponent({ name: 'PlayerModal' })
+    expect(modal.props('players').map(player => player.provider)).toEqual(['Turbo', 'Veoveo'])
+  })
+
+  it('открывает один список плееров вместо отдельного поиска версий KinoBD', async () => {
+    getPlayers.mockResolvedValue({ Turbo: { iframe: 'https://x.obrut.show/film', provider: 'Turbo' } })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('.source-btn').exists()).toBe(false)
+    expect(wrapper.find('.player-btn').text()).toContain('Источник видео')
+    await wrapper.find('.player-btn').trigger('click')
+    expect(wrapper.find('.player-btn').attributes('aria-expanded')).toBe('true')
+    const modal = wrapper.findComponent({ name: 'PlayerModal' })
+    modal.vm.$emit('select', { key: 'VEOVEO', iframe: 'https://kurolesya.link/film', provider: 'Veoveo' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('iframe').attributes('src')).toContain('kurolesya.link')
+    expect(localStorage.getItem('abobatv_selected_player_687595')).toBe('VEOVEO')
+  })
 })

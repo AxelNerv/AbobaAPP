@@ -35,9 +35,9 @@ const getSources = (kpId) => {
 export const getPlayers = async (kpId, options = {}) => {
   if (options.signal?.aborted) throw options.signal.reason
   const { providers } = await waitForSharedRequest(getSources(kpId), options.signal)
-  // Turbo and Collaps passed real playback in Electron. The aggregator's Alloha
-  // renders a player but its video stalls, so old preferences must not select it.
-  const playable = providers.filter((provider) => /^(turbo|collaps)$/i.test(String(provider.type)))
+  // Veoveo is fetched from an independent API and passed real film playback.
+  // The relay's Turbo/VideoSeed/Alloha were tested but did not play this film.
+  const playable = providers.filter((provider) => /^(turbo|collaps|veoveo)$/i.test(String(provider.type)))
   // Foreign-language translations do not replace the Russian player selection.
   const russian = playable.map((provider) => ({
     ...provider,

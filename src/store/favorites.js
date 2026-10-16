@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { getLibraryToken, libraryRequest, parseLibraryItems, requireLibraryAck } from '@/api/libraryRequest'
 
 const STORAGE_KEY = 'abobatv_favorites_v1'
 const favoriteMutations = new Map()
@@ -9,61 +10,28 @@ const loadFromStorage = () => {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
+    return parseLibraryItems(parsed)
+  } catch (error) {
+    console.warn('[favorites] локальное избранное не прочитано:', error?.message || error)
     return []
   }
 }
 
 const saveToStorage = (favs) => {
   if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(favs))
-    // Sync across dual Pinia instances via window global
-    window.__favorites = favs
-  } catch {
-    /* ignore */
-  }
-}
-
-// Достаём авторизационный токен пользователя из persisted-стора Pinia.
-// Если юзер залогинен — токен есть, и мы можем синхронизировать избранное на сервере.
-// Если не залогинен — работаем только с localStorage (поведение как раньше).
-const getAuthToken = () => {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem('auth')
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    return parsed?.token || null
-  } catch {
-    return null
-  }
-}
-
-const getBackendUrl = () => {
-  if (typeof window === 'undefined') return '/api-backend'
-  // Используем относительный путь — nginx проксирует /api-backend/* на FastAPI.
-  return '/api-backend'
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(favs))
 }
 
 const syncToServer = async (method, kpId, body = null) => {
-  const token = getAuthToken()
-  if (!token) return true // без входа избранное остаётся локальным
-
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
-  }
-  const opts = { method, headers }
+  const token = getLibraryToken()
+  if (!token) return false // без входа запись должна сохраниться локально
+  const opts = { method }
   if (body) opts.body = JSON.stringify(body)
 
   const url = kpId
-    ? `${getBackendUrl()}/list/favorites/${kpId}`
-    : `${getBackendUrl()}/list/favorites`
-
-  const response = await fetch(url, opts)
-  if (!response.ok) throw new Error(`Сервер избранного ответил HTTP ${response.status}`)
+    ? `/list/favorites/${kpId}`
+    : '/list/favorites'
+  requireLibraryAck(await libraryRequest(url, opts))
   return true
 }
 
@@ -76,6 +44,24 @@ export const useFavoritesStore = defineStore('favorites', {
     isFavorite: (state) => (kpId) => state.favorites.some((m) => String(m.kp_id) === String(kpId))
   },
   actions: {
+    _persist(next, serverSaved) {
+      try {
+        saveToStorage(next)
+        this.lastError = ''
+      } catch (cause) {
+        const error = new Error(serverSaved
+          ? 'Избранное сохранено на сервере, но локальный кэш записать не удалось'
+          : 'Не удалось сохранить избранное на устройстве', { cause })
+        this.lastError = error.message
+        console.warn('[favorites]', error.message, cause?.message || cause)
+        // A failed cache must not undo a confirmed server mutation. Without a
+        // server, however, no durable copy exists: never report local success.
+        if (!serverSaved) throw error
+        window.__toast?.(error.message, 6000)
+      }
+      this.favorites = next
+      if (typeof window !== 'undefined') window.__favorites = next
+    },
     _load() {
       // Reload from storage (for dual Pinia sync)
       if (typeof window !== 'undefined') {
@@ -86,17 +72,11 @@ export const useFavoritesStore = defineStore('favorites', {
     // Загружает избранное С СЕРВЕРА и кладёт в локальный стор.
     // Вызывается при логине / переключении устройства.
     async loadFromServer() {
-      const token = getAuthToken()
-      if (!token) return false
       try {
-        const response = await fetch(`${getBackendUrl()}/list/favorites`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        if (!response.ok) throw new Error(`Сервер избранного ответил HTTP ${response.status}`)
-        const data = await response.json()
-        const items = Array.isArray(data?.items) ? data.items : []
+        if (!getLibraryToken()) return false
+        const items = parseLibraryItems(await libraryRequest('/list/favorites'))
         // Нормализуем формат, чтобы UI его понял
-        this.favorites = items.map((m) => ({
+        const next = items.map((m) => ({
           kp_id: m.kp_id || m.id || '',
           title: m.title || m.name_ru || '',
           slug: m.slug || '',
@@ -107,8 +87,7 @@ export const useFavoritesStore = defineStore('favorites', {
           rating_imdb: m.rating_imdb || (m.ratings && m.ratings.imdb) || '',
           addedAt: m.addedAt || Date.now()
         }))
-        saveToStorage(this.favorites)
-        this.lastError = ''
+        this._persist(next, true)
         return true
       } catch (e) {
         this.lastError = e?.message || 'Не удалось загрузить избранное'
@@ -133,17 +112,15 @@ export const useFavoritesStore = defineStore('favorites', {
       }
       // Для вошедшего пользователя сначала подтверждаем запись в локальном
       // бэкенде. Иначе HTTP 500 выглядел как успех, а после перезапуска фильм исчезал.
-      await syncToServer('PUT', entry.kp_id, { movie: entry })
-      this.favorites = [entry, ...this.favorites]
-      saveToStorage(this.favorites)
+      const serverSaved = await syncToServer('PUT', entry.kp_id, { movie: entry })
+      this._persist([entry, ...this.favorites], serverSaved)
       return true
     },
     async remove(kpId) {
       this._load()
       if (!this.favorites.some((m) => String(m.kp_id) === String(kpId))) return false
-      await syncToServer('DELETE', kpId)
-      this.favorites = this.favorites.filter((m) => String(m.kp_id) !== String(kpId))
-      saveToStorage(this.favorites)
+      const serverSaved = await syncToServer('DELETE', kpId)
+      this._persist(this.favorites.filter((m) => String(m.kp_id) !== String(kpId)), serverSaved)
       return true
     },
     async toggle(movie) {
@@ -165,9 +142,8 @@ export const useFavoritesStore = defineStore('favorites', {
       }
     },
     async clear() {
-      await syncToServer('DELETE', null)
-      this.favorites = []
-      saveToStorage(this.favorites)
+      const serverSaved = await syncToServer('DELETE', null)
+      this._persist([], serverSaved)
       return true
     }
   }

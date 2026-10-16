@@ -19,7 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse
 from typing import Optional
 
 import aiohttp
-from movie_sources import MovieSources, SourceUnavailable
+from movie_sources import PlayerSourcePool, SourceUnavailable
 from movie_search import MovieSearch
 from movie_catalog import MovieCatalog
 import sync
@@ -437,7 +437,7 @@ async def _get_session_for(provider: str) -> aiohttp.ClientSession:
     return _fresh_http_session
 
 
-_movie_sources = MovieSources()
+_movie_sources = PlayerSourcePool()
 _movie_search = MovieSearch()
 _movie_catalog = MovieCatalog()
 

@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 from aiohttp import web
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from movie_sources import MovieSources, SourceUnavailable, allowed_embed, page_metadata
+from movie_sources import MovieSources, PlayerSourcePool, SourceUnavailable, allowed_embed, page_metadata
 
 
 class MetadataTests(unittest.TestCase):
@@ -27,9 +29,14 @@ class MetadataTests(unittest.TestCase):
 
     def test_fixed_embed_destinations(self):
         self.assertTrue(allowed_embed("https://api.nextembed.ws/embed/movie/14"))
+        self.assertTrue(allowed_embed("https://kurolesya.link/balancer-api/iframe"))
         for url in ("https://127.0.0.1/", "http://api.nextembed.ws/", "https://api.nextembed.ws.evil.com/",
                     "https://x@api.nextembed.ws/", "https://api.nextembed.ws:8000/", None, {}, 123):
             self.assertFalse(allowed_embed(url), url)
+
+    def test_source_cannot_be_an_arbitrary_url(self):
+        with self.assertRaises(ValueError):
+            MovieSources("https://127.0.0.1/admin")
 
 
 class LookupTests(unittest.IsolatedAsyncioTestCase):
@@ -37,6 +44,7 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
         self.calls = []
         self.api_status = 200
         self.broken_status = 403
+        self.redirect_target = "/working"
         self.api_data = {"data": [
             {"type": "Collaps", "iframeUrl": "https://api.nextembed.ws/working",
              "translations": [{"name": "Русский", "iframeUrl": "https://api.nextembed.ws/working"},
@@ -53,6 +61,8 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
                 return web.json_response(self.api_data, status=self.api_status)
             if request.path == "/working":
                 return web.Response(text='<title>Кухня (6 сезон) - 101 серия</title>', content_type="text/html")
+            if request.path == "/redirect":
+                return web.Response(status=307, headers={"Location": self.redirect_target})
             return web.Response(status=self.broken_status)
 
         app.router.add_get("/{path:.*}", handle)
@@ -131,3 +141,86 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.service.get("../admin", self.session, {})
         self.assertEqual(self.calls, [])
+
+    async def test_new_source_only_returns_verified_provider(self):
+        self.service = MovieSources("reyhoho")
+        self.api_data = {"data": [
+            {"type": "Veoveo", "iframeUrl": "https://kurolesya.link/working", "translations": []},
+            {"type": "Turbo", "iframeUrl": "https://x.obrut.show/working"},
+            {"type": "Videoseed", "iframeUrl": "https://unverified.example/working"},
+        ]}
+        result = await self.get()
+        self.assertEqual(result["source"], "reyhoho")
+        self.assertEqual([p["type"] for p in result["providers"]], ["Veoveo"])
+        self.assertEqual(self.calls.count("/working"), 1)
+
+    async def test_new_source_first_visit_follows_only_same_host_redirect(self):
+        self.service = MovieSources("reyhoho")
+        self.api_data = {"data": [{"type": "Veoveo", "iframeUrl": "https://kurolesya.link/redirect"}]}
+        self.assertEqual((await self.get())["providers"][0]["type"], "Veoveo")
+        self.assertEqual(self.calls[-2:], ["/redirect", "/working"])
+
+    async def test_redirect_cannot_escape_to_another_host_or_loop_forever(self):
+        self.service = MovieSources("reyhoho")
+        self.api_data = {"data": [{"type": "Veoveo", "iframeUrl": "https://kurolesya.link/redirect"}]}
+        for target in ("http://127.0.0.1/admin", "https://api.nextembed.ws/working", "/redirect"):
+            self.redirect_target = target
+            with self.assertRaises(SourceUnavailable):
+                await self.get()
+        self.assertNotIn("/admin", self.calls)
+        self.assertNotIn("/working", self.calls)
+        self.assertLessEqual(self.calls.count("/redirect"), 5)
+
+
+class PoolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.pool = PlayerSourcePool()
+        self.primary = {"kp_id": "10453010", "source": "fbp", "title": "Железное лёгкое", "providers": [
+            {"type": "Turbo", "iframeUrl": "https://x.obrut.show/embed/film"}]}
+        self.reserve = {"kp_id": "10453010", "source": "reyhoho", "providers": [
+            {"type": "Veoveo", "iframeUrl": "https://kurolesya.link/balancer-api/iframe"}]}
+        self.pool.primary = SimpleNamespace(source="fbp", get=AsyncMock(return_value=self.primary))
+        self.pool.reserve = SimpleNamespace(source="reyhoho", get=AsyncMock(return_value=self.reserve))
+
+    async def get(self):
+        return await self.pool.get("10453010", None, {})
+
+    async def test_primary_turbo_and_extra_player_are_available_together(self):
+        result = await self.get()
+        self.assertEqual([p["type"] for p in result["providers"]], ["Turbo", "Veoveo"])
+        self.assertEqual(result["origins"], ["fbp", "reyhoho"])
+        self.assertEqual(result["source"], "fbp")
+
+    async def test_duplicate_urls_are_not_extra_sources(self):
+        self.reserve["providers"].append(self.primary["providers"][0])
+        self.assertEqual(len((await self.get())["providers"]), 2)
+
+    async def test_primary_can_fail_while_reserve_is_usable(self):
+        self.pool.primary.get.side_effect = SourceUnavailable("HTTP 502")
+        result = await self.get()
+        self.assertEqual(result["providers"][0]["type"], "Veoveo")
+        self.assertEqual(result["source"], "fbp")
+
+    async def test_failed_reserve_does_not_hide_primary(self):
+        self.pool.reserve.get.side_effect = SourceUnavailable("HTTP 503")
+        result = await self.get()
+        self.assertEqual(result["providers"], self.primary["providers"])
+
+    async def test_hung_reserve_has_a_separate_bounded_deadline(self):
+        async def hanging(*args):
+            await asyncio.sleep(20)
+        self.pool.reserve.get.side_effect = hanging
+        with patch("movie_sources.RESERVE_TIMEOUT", .01):
+            self.assertEqual((await self.get())["providers"], self.primary["providers"])
+
+    async def test_total_failure_is_not_an_empty_success(self):
+        self.pool.primary.get.side_effect = SourceUnavailable("offline")
+        self.pool.reserve.get.side_effect = SourceUnavailable("offline")
+        with self.assertRaises(SourceUnavailable):
+            await self.get()
+
+    async def test_bad_id_does_not_call_either_api(self):
+        with self.assertRaises(ValueError):
+            await self.pool.get("../admin", None, {})
+        self.pool.primary.get.assert_not_called()
+        self.pool.reserve.get.assert_not_called()

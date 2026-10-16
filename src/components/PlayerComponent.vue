@@ -4,15 +4,15 @@
   <template v-else>
     <!-- Кнопка для открытия модалки выбора плеера -->
     <div class="players-list">
-      <button class="player-btn" @click="openPlayerModal">
-        {{
-          selectedPlayerInternal
-            ? getProviderDisplayName(selectedPlayerInternal).toUpperCase()
-            : 'Загрузка плееров...'
-        }}
+      <button type="button" class="player-btn" aria-haspopup="dialog" :aria-expanded="showPlayerModal" :disabled="!playersInternal.length" @click="openPlayerModal">
+        <AppIcon name="layers" :size="20" class="player-btn-icon" />
+        <span class="player-btn-copy">
+          <span class="player-btn-label">Источник видео</span>
+          <strong>{{ selectedPlayerInternal ? getProviderDisplayName(selectedPlayerInternal) : 'Загрузка плееров...' }}</strong>
+        </span>
         <span v-if="selectedPlayerInternal?.uhd" class="uhd-badge">4K</span>
+        <span class="player-btn-action">Изменить <AppIcon name="forward" :size="16" /></span>
       </button>
-      <button v-if="isKinoBdProvider" class="source-btn" @click="openSourceModal">Источник</button>
     </div>
 
     <!-- Модальное окно выбора плеера -->
@@ -20,29 +20,10 @@
       v-if="showPlayerModal"
       :players="playersInternal"
       :selected-player="selectedPlayerInternal"
+      :movie-title="movieInfo?.title || ''"
       @close="closePlayerModal"
       @select="handlePlayerSelect"
     />
-
-    <div v-if="showSourceModal" class="source-modal-backdrop" @click.self="closeSourceModal">
-      <div class="source-modal">
-        <div class="source-modal-header">
-          <h3>Выбор источника KinoBD</h3>
-          <button class="source-close-btn" @click="closeSourceModal">×</button>
-        </div>
-        <div v-if="sourceLoading" class="source-loading">Загрузка источников...</div>
-        <div v-else-if="sourceError" class="source-error">{{ sourceError }}</div>
-        <div v-else-if="sourceCandidates.length === 0" class="source-empty">Источники не найдены</div>
-        <ul v-else class="source-candidate-list">
-          <li v-for="candidate in sourceCandidates" :key="candidate.id">
-            <button class="source-candidate-btn" @click="applySourceCandidate(candidate)">
-              <span class="source-title">{{ candidate.title || `ID ${candidate.id}` }}</span>
-              <span class="source-meta">inid: {{ candidate.id }} · kp: {{ candidate.kp_id || '-' }}</span>
-            </button>
-          </li>
-        </ul>
-      </div>
-    </div>
 
     <div v-if="progressLabel" class="progress-resume">
       Остановился: <strong>{{ progressLabel }}</strong>
@@ -266,11 +247,7 @@
 </template>
 
 <script setup>
-import {
-  getPlayers,
-  searchKinoBDPlayerCandidates,
-  getKinoBDPlayerDataByInid
-} from '@/api/movies'
+import { getPlayers } from '@/api/movies'
 import { handleApiError } from '@/constants'
 import { resetPinnedHost } from '@/utils/playerHost'
 import AppIcon from '@/components/icons/AppIcon.vue'
@@ -311,10 +288,6 @@ const closeButtonVisible = ref(false)
 const playerIframe = ref(null)
 const containerRef = ref(null)
 const showPlayerModal = ref(false)
-const showSourceModal = ref(false)
-const sourceCandidates = ref([])
-const sourceLoading = ref(false)
-const sourceError = ref('')
 
 // Переменные для ошибок
 const errorMessage = ref('')
@@ -414,7 +387,7 @@ const BLOCKED_PLAYERS = ['FLIXCDN']
 
 // Приоритет плееров: чем раньше в списке — тем выше (и тем вероятнее станет дефолтным).
 // Turbo — самый стабильный/быстрый, поэтому он первый для обычного кино.
-const PLAYER_PRIORITY = ['TURBO', 'COLLAPS', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
+const PLAYER_PRIORITY = ['TURBO', 'COLLAPS', 'VEOVEO', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
 
 const playerPriorityIndex = (player) => {
   const list = PLAYER_PRIORITY
@@ -599,60 +572,6 @@ const openPlayerModal = () => {
 
 const closePlayerModal = () => {
   showPlayerModal.value = false
-}
-
-const openSourceModal = async () => {
-  showSourceModal.value = true
-  sourceError.value = ''
-  sourceLoading.value = true
-
-  try {
-    const query =
-      props.movieInfo?.title ||
-      props.movieInfo?.name_ru ||
-      props.movieInfo?.name_en ||
-      props.movieInfo?.name_original ||
-      props.kpId
-
-    let candidates = []
-    if (query) {
-      candidates = await searchKinoBDPlayerCandidates(query, { type: 'title', page: 1 })
-    }
-    if (!candidates.length && props.kpId) {
-      candidates = await searchKinoBDPlayerCandidates(props.kpId, { type: 'kp_id', page: 1 })
-    }
-    sourceCandidates.value = candidates
-  } catch (error) {
-    sourceError.value = 'Не удалось загрузить список источников'
-    console.error('Ошибка при загрузке источников KinoBD:', error)
-  } finally {
-    sourceLoading.value = false
-  }
-}
-
-const closeSourceModal = () => {
-  showSourceModal.value = false
-}
-
-const applySourceCandidate = async (candidate) => {
-  if (!candidate?.id) return
-
-  sourceLoading.value = true
-  sourceError.value = ''
-
-  try {
-    const players = await getKinoBDPlayerDataByInid(candidate.id, {
-      playerUrl: candidate.iframe
-    })
-    applyPlayersData(players)
-    playerStore.setKinoBdSource(props.kpId, candidate.id)
-    closeSourceModal()
-  } catch (error) {
-    sourceError.value = 'Не удалось применить выбранный источник'
-    console.error('Ошибка применения источника KinoBD:', error)
-  } finally {
-    sourceLoading.value = false
-  }
 }
 
 const toggleTheaterMode = () => {
@@ -1204,7 +1123,7 @@ onBeforeUnmount(() => {
   margin: 0 auto 10px;
 }
 
-/* Панель плеера — новый стиль "Плеер: Turbo | изменить ›" */
+/* Один вход в список доступных видеоплееров. */
 .uhd-badge {
   display: inline-flex;
   align-items: center;
@@ -1226,30 +1145,25 @@ onBeforeUnmount(() => {
   color: var(--text-color);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 10px;
-  padding: 9px 16px;
+  padding: 10px 14px;
+  min-height: 60px;
+  box-sizing: border-box;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.18s;
+  transition: border-color 0.18s, background-color 0.18s;
   width: 100%;
   max-width: 800px;
   text-align: left;
 
-  &::before {
-    content: 'Плеер:';
-    color: rgba(255,255,255,0.35);
-    font-weight: 400;
-    flex-shrink: 0;
-  }
-
-  &::after {
-    content: 'изменить ›';
-    margin-left: auto;
-    font-size: 11px;
-    color: rgba(255,255,255,0.22);
-    flex-shrink: 0;
-  }
 }
+
+.player-btn-icon { color: var(--accent-color); flex-shrink: 0; }
+.player-btn-copy { display: grid; gap: 3px; min-width: 0; }
+.player-btn-label { color: var(--text-secondary); font-size: 11px; }
+.player-btn-copy strong { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.player-btn-action { display: flex; align-items: center; gap: 5px; margin-left: auto; color: var(--text-secondary); font-size: 12px; flex-shrink: 0; }
+.player-btn:disabled { cursor: wait; }
 
 .player-btn:hover {
   border-color: rgba(var(--accent-rgb),0.28);
@@ -1257,26 +1171,11 @@ onBeforeUnmount(() => {
   color: var(--accent-color);
 }
 
-.player-btn:active,
-.player-btn:focus {
-  outline: none;
+.player-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
   border-color: var(--accent-color);
 }
-
-.source-btn {
-  padding: 9px 14px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.04);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.18s;
-  flex-shrink: 0;
-}
-
-/* Телефон: «Плеер: TURBO изменить › | Источник» не помещался и уезжал за экран */
 @media (max-width: 600px) {
   .players-list {
     padding: 0 12px;
@@ -1287,102 +1186,6 @@ onBeforeUnmount(() => {
     min-width: 0;
     padding: 9px 12px;
   }
-  .player-btn::after {
-    display: none;
-  }
-}
-
-.source-btn:hover {
-  border-color: rgba(var(--accent-rgb),0.28);
-  color: var(--accent-color);
-}
-
-.source-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(6px);
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-}
-
-.source-modal {
-  width: min(720px, 100%);
-  max-height: 80vh;
-  overflow: auto;
-  background: #222;
-  border: 1px solid #444;
-  border-radius: 10px;
-  padding: 14px;
-}
-
-.source-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.source-modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.source-close-btn {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 26px;
-  cursor: pointer;
-}
-
-.source-loading,
-.source-error,
-.source-empty {
-  padding: 10px 0;
-}
-
-.source-error {
-  color: #ff7a7a;
-}
-
-.source-candidate-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.source-candidate-btn {
-  width: 100%;
-  text-align: left;
-  background: #333;
-  border: 1px solid #4f4f4f;
-  color: #fff;
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.source-candidate-btn:hover {
-  border-color: var(--accent-color);
-  background: #3a3a3a;
-}
-
-.source-title {
-  font-weight: 600;
-}
-
-.source-meta {
-  opacity: 0.8;
-  font-size: 12px;
 }
 
 .player-container {

@@ -5,7 +5,7 @@ import html
 import json
 import re
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import aiohttp
 
@@ -14,7 +14,11 @@ MAX_BODY = 512 * 1024
 CACHE_TTL = 120
 CACHE_SIZE = 128
 # Fixed destinations: the upstream response must not turn this into an open proxy.
-PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws")
+PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws", "kurolesya.link")
+SOURCE_URLS = {"fbp": API_BASE, "reyhoho": "https://api.reyhoho.fun"}
+# The reserve needs its lookup (up to 6 s) plus an embed probe (up to 4 s).
+# A 4 s outer deadline discarded healthy first visits before they completed.
+RESERVE_TIMEOUT = 10.5
 
 
 def allowed_embed(url):
@@ -68,7 +72,12 @@ class SourceUnavailable(Exception):
 
 
 class MovieSources:
-    def __init__(self):
+    def __init__(self, source="fbp"):
+        # Only fixed public API destinations; callers cannot supply a proxy URL.
+        if source not in SOURCE_URLS:
+            raise ValueError("unknown player source")
+        self.source = source
+        self.api_base = SOURCE_URLS[source]
         self.cache = OrderedDict()
         self.pending = {}
         self.probe_slots = asyncio.Semaphore(4)
@@ -97,7 +106,7 @@ class MovieSources:
     async def _load(self, kp_id, session, headers):
         try:
             async with session.get(
-                f"{API_BASE}/api/players", params={"kinopoisk": kp_id}, headers=headers,
+                f"{self.api_base}/api/players", params={"kinopoisk": kp_id}, headers=headers,
                 timeout=aiohttp.ClientTimeout(total=6, connect=2), allow_redirects=False,
             ) as response:
                 if response.status != 200:
@@ -110,6 +119,14 @@ class MovieSources:
             providers = data["data"]
             if any(not isinstance(p, dict) for p in providers) or len(providers) > 20:
                 raise SourceUnavailable("invalid provider list")
+            if self.source == "reyhoho":
+                # Only this new provider passed real film playback and seeking.
+                # The relay's Turbo, VideoSeed and Alloha did not pass.
+                providers = [p for p in providers if str(p.get("type", "")).lower() == "veoveo"]
+            else:
+                # FBP's Veoveo uses another endpoint (redirects/failures in live
+                # checks). It must not shadow the verified independent reserve.
+                providers = [p for p in providers if str(p.get("type", "")).lower() != "veoveo"]
             results = await asyncio.gather(*(self._probe(p, session, headers) for p in providers))
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
             raise SourceUnavailable(type(error).__name__) from error
@@ -122,7 +139,7 @@ class MovieSources:
         summary = next((item for item in summaries if item.get("year")), summaries[0] if summaries else {})
         if any(item.get("type") == "TV_SERIES" for item in summaries):
             summary = {**summary, "type": "TV_SERIES"}
-        result = {"kp_id": kp_id, **summary, "providers": [p for p, _ in live], "source": "fbp"}
+        result = {"kp_id": kp_id, **summary, "providers": [p for p, _ in live], "source": self.source}
         self.cache[kp_id] = (time.monotonic() + CACHE_TTL, result)
         self.cache.move_to_end(kp_id)
         while len(self.cache) > CACHE_SIZE:
@@ -135,7 +152,7 @@ class MovieSources:
             print(f"[sources] {provider.get('type', 'unknown')}: unsupported or empty embed")
             return None
         # Same referrer as the public integration. No scripts are executed server-side.
-        page_headers = {**headers, "Accept": "text/html", "Referer": API_BASE + "/"}
+        page_headers = {**headers, "Accept": "text/html", "Referer": self.api_base + "/"}
         translations = provider.get("translations", [])
         if not isinstance(translations, list):
             translations = []
@@ -143,23 +160,66 @@ class MovieSources:
                    if isinstance(t, dict) and allowed_embed(t.get("iframeUrl"))]}
         try:
             async with self.probe_slots:
-                async with session.get(url, headers=page_headers, allow_redirects=False,
-                                       timeout=aiohttp.ClientTimeout(total=4, connect=2)) as response:
-                    # Turbo returns 403 to Python, but the SAME public embed plays
-                    # in Electron. Do not mistake a server-side probe for playback.
-                    host = (urlparse(url).hostname or "").lower()
-                    if (response.status == 403 and str(provider.get("type", "")).lower() == "turbo"
-                            and (host == "obrut.show" or host.endswith(".obrut.show"))):
-                        print("[sources] Turbo: HTTP 403 to probe; loading in browser")
-                        return {**cleaned, "browserOnly": True}, {}
-                    if response.status != 200:
-                        print(f"[sources] {provider.get('type')}: embed HTTP {response.status}")
-                        return None
-                    if "text/html" not in response.headers.get("Content-Type", "").lower():
-                        print(f"[sources] {provider.get('type')}: embed is not HTML")
-                        return None
-                    page = (await read_limited(response)).decode("utf-8", "replace")
-            return cleaned, page_metadata(page)
+                host = (urlparse(url).hostname or "").lower()
+                for _ in range(3):
+                    async with session.get(url, headers=page_headers, allow_redirects=False,
+                                           timeout=aiohttp.ClientTimeout(total=4, connect=2)) as response:
+                        # Veoveo's first visit sets a cookie and redirects on the
+                        # same host. Validate every hop; never follow arbitrary URLs.
+                        if response.status in (301, 302, 303, 307, 308):
+                            location = response.headers.get("Location")
+                            target = urljoin(url, location) if location else ""
+                            if not allowed_embed(target) or urlparse(target).hostname.lower() != host:
+                                raise ValueError("untrusted embed redirect")
+                            url = target
+                            continue
+                        # Turbo's HTTP 403 probe can still play in Electron.
+                        if (response.status == 403 and str(provider.get("type", "")).lower() == "turbo"
+                                and (host == "obrut.show" or host.endswith(".obrut.show"))):
+                            print("[sources] Turbo: HTTP 403 to probe; loading in browser")
+                            return {**cleaned, "browserOnly": True}, {}
+                        if response.status != 200:
+                            print(f"[sources] {provider.get('type')}: embed HTTP {response.status}")
+                            return None
+                        if "text/html" not in response.headers.get("Content-Type", "").lower():
+                            print(f"[sources] {provider.get('type')}: embed is not HTML")
+                            return None
+                        page = (await read_limited(response)).decode("utf-8", "replace")
+                        return cleaned, page_metadata(page)
+                raise ValueError("too many embed redirects")
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
             print(f"[sources] {provider.get('type')}: embed {type(error).__name__}")
             return None
+
+
+class PlayerSourcePool:
+    """Fetch the fast sources together; an optional reserve cannot hide FBP."""
+    def __init__(self):
+        self.primary = MovieSources()
+        self.reserve = MovieSources("reyhoho")
+
+    async def get(self, kp_id, session, headers):
+        if not re.fullmatch(r"[1-9]\d{0,11}", str(kp_id)):
+            raise ValueError("invalid Kinopoisk ID")
+
+        async def attempt(source, timeout):
+            try:
+                return await asyncio.wait_for(source.get(kp_id, session, headers), timeout)
+            except (SourceUnavailable, asyncio.TimeoutError) as error:
+                print(f"[sources] {source.source}: {type(error).__name__}: {error}")
+                return error
+
+        results = await asyncio.gather(attempt(self.primary, 10.5), attempt(self.reserve, RESERVE_TIMEOUT))
+        available = [result for result in results if isinstance(result, dict)]
+        if not available:
+            raise SourceUnavailable("all fast player APIs unavailable")
+        providers, seen = [], set()
+        for result in available:
+            for provider in result["providers"]:
+                url = provider["iframeUrl"]
+                if url not in seen:
+                    providers.append(provider)
+                    seen.add(url)
+        # Keep the existing frontend group ID for sequential fallback to old APIs.
+        return {**available[0], "kp_id": str(kp_id), "providers": providers, "source": "fbp",
+                "origins": [result["source"] for result in available]}
