@@ -90,7 +90,8 @@ const authServerUrl = () => {
 const startConfiguredBackend = () => backend.startBackend(APP_ROOT, {
   // Секрет Docker-бота не передаётся клиентскому бэкенду.
   AUTH_SERVER_URL: authServerUrl(),
-  TMDB_API_KEY: appEnv.TMDB_API_KEY || ''
+  TMDB_API_KEY: appEnv.TMDB_API_KEY || '',
+  OMDB_API_KEY: appEnv.OMDB_API_KEY || ''
 }, DATA_DIR, { onStatus: reportBackendStatus })
 
 const showMainWindow = () => {

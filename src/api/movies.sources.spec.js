@@ -10,7 +10,6 @@ vi.mock('@/api/movies.kinobd', () => ({ getPlayers: vi.fn(), getKpInfo: vi.fn() 
 vi.mock('@/api/movies.kinobox', () => ({ getPlayers: vi.fn() }))
 vi.mock('@/api/movies.catalog', () => ({ getKpInfo: vi.fn() }))
 vi.mock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async (rows) => rows }))
-vi.mock('@/api/movies.tmdb', () => ({ enrichMissingFields: async (movie) => movie }))
 
 describe('независимый источник фильмов и плееров', () => {
   beforeEach(() => {

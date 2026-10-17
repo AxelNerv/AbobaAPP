@@ -135,6 +135,7 @@ const spawnBackend = () => {
         STATE_FILE: path.join(dataDir, 'state.json'),
         ADMIN_KEY: env.ADMIN_KEY || '',
         TMDB_API_KEY: env.TMDB_API_KEY || '',
+        OMDB_API_KEY: env.OMDB_API_KEY || '',
         AUTH_MODE: 'client',
         AUTH_SERVER_URL: env.AUTH_SERVER_URL || '',
         ABOBA_INSTANCE_ID: INSTANCE_ID,

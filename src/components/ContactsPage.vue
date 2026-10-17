@@ -16,6 +16,22 @@
         >https://t.me/abobatv_sup</a
       >
     </p>
+    <h2>Источники данных</h2>
+    <p>
+      <a href="https://anilist.co/" target="_blank" rel="noopener noreferrer">AniList</a> — данные аниме.
+      <a href="https://www.omdbapi.com/" target="_blank" rel="noopener noreferrer">OMDb</a> —
+      данные фильмов, CC BY-NC 4.0. TMDB и OMDb используются только после настройки личных API-ключей.
+    </p>
+    <p>
+      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer">
+        <img src="@/assets/tmdb-logo.svg" alt="TMDB" width="32" height="23" />
+      </a>
+      This product uses the TMDB API but is not endorsed or certified by TMDB.
+    </p>
+    <p>
+      Логотип TMDB — Travis Bell, без изменений,
+      <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.
+    </p>
   </div>
 </template>
 

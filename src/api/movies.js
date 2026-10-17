@@ -2,7 +2,6 @@ import { useMainStore } from '@/store/main'
 import * as kinobd from '@/api/movies.kinobd'
 import * as kinobox from '@/api/movies.kinobox'
 import * as fbp from '@/api/movies.fbp'
-import * as tmdb from '@/api/movies.tmdb'
 import * as wikidata from '@/api/movies.wikidata'
 import * as catalog from '@/api/movies.catalog'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
@@ -137,9 +136,8 @@ const getKpInfo = async (kpId, _token, { signal } = {}) => {
     { label: 'getKpInfo', isUsable: isGoodInfo, signal }
   )
 
-  // Добираем у TMDB описание и постер, если их нет. TMDB не банит по IP,
-  // поэтому закрывает дыры, которые оставляют остальные источники.
-  return await tmdb.enrichMissingFields(data)
+  // Optional external metadata is loaded in the background by the movie page.
+  return data
 }
 // Independent source first: a KinoBD outage must not delay a working player.
 const hasPlayers = (result) =>

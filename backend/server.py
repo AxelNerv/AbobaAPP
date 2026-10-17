@@ -22,6 +22,7 @@ import aiohttp
 from movie_sources import PlayerSourcePool, SourceUnavailable
 from movie_search import MovieSearch
 from movie_catalog import MovieCatalog
+from movie_metadata import MovieMetadata, MetadataRequest
 import sync
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -260,6 +261,17 @@ PROXY_TARGETS = {
 # префиксом VITE_, вкомпилируется в публичный бандл и утечёт. Поэтому браузер
 # ходит на /ext/tmdb/... без ключа, а прокси подставляет его сам.
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "").strip()
+_movie_metadata = MovieMetadata(TMDB_API_KEY, os.getenv("OMDB_API_KEY", "").strip())
+
+
+@app.get("/metadata/status")
+async def metadata_status():
+    return _movie_metadata.status()
+
+
+@app.post("/metadata/enrich")
+async def metadata_enrich(movie: MetadataRequest):
+    return await _movie_metadata.get(movie, await _get_http_session())
 
 # Доп. заголовки, которые источник требует, а браузер запрещает ставить из JS
 # (Referer/Origin — «unsafe headers»). Ставим их здесь, server-side.
@@ -503,6 +515,7 @@ IMAGE_HOSTS = (
     "avatars.mds.yandex.net",
     "image.tmdb.org",
     "m.media-amazon.com",
+    "s4.anilist.co",
 )
 IMAGE_MAX_BYTES = 4 * 1024 * 1024
 IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024

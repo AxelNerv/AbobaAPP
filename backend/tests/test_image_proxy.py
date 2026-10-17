@@ -14,6 +14,7 @@ from server import _image_host_allowed  # noqa: E402
 
 class ImageHostTest(unittest.TestCase):
     def test_poster_hosts(self):
+        self.assertTrue(_image_host_allowed("https://s4.anilist.co/file/anilistcdn/media/anime/cover/1.jpg"))
         self.assertTrue(_image_host_allowed("https://kinopoiskapiunofficial.tech/images/posters/kp_small/1.jpg"))
         self.assertTrue(_image_host_allowed("https://avatars.mds.yandex.net/get-kinopoisk-image/1/x/360"))
         self.assertTrue(_image_host_allowed("https://st.kp.yandex.net/images/film_big/1.jpg"))

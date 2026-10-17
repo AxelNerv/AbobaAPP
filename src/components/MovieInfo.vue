@@ -311,6 +311,8 @@
                   <strong>{{ isSeries ? 'Длительность серии:' : 'Продолжительность:' }}</strong>
                   {{ formatTime(movieInfo.film_length) }}
                 </li>
+                <li v-if="movieInfo.episodes_count"><strong>Всего серий:</strong> {{ movieInfo.episodes_count }}</li>
+                <li v-if="movieInfo.seasons_count"><strong>Сезонов:</strong> {{ movieInfo.seasons_count }}</li>
                 <li v-if="seriesGuide" class="series-guide-status">
                   <strong>Статус сериала:</strong>
                   <span>{{ seriesGuide.statusLabel || 'Неизвестен' }}</span>
@@ -513,6 +515,7 @@ import { addToList } from '@/api/user'
 import { MovieList } from '@/components/MovieList/'
 import { getRelated } from '@/api/related'
 import { getSeriesGuide } from '@/api/tvmaze'
+import { createMovieMetadataLoader } from '@/api/movieMetadata'
 import ErrorMessage from '@/components/ErrorMessage.vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'
 import { TYPES_ENUM, USER_LIST_TYPES_ENUM } from '@/constants'
@@ -812,6 +815,10 @@ const setPagePoster = (url) => {
 }
 
 const movieInfoRequests = createLatestRequestGuard()
+const movieMetadata = createMovieMetadataLoader((movie) => {
+  movieInfo.value = movie
+  if (movie.backdrop_url) setPagePoster(movie.backdrop_url)
+})
 const seriesGuide = ref(null)
 let seriesGuideRequest = 0
 
@@ -824,6 +831,7 @@ const loadSeriesGuide = async (movie, requestedKpId) => {
 }
 
 const fetchMovieInfo = async (updateHistory = true) => {
+  movieMetadata.cancel()
   const request = movieInfoRequests.begin()
   const requestedKpId = String(kp_id.value || '')
   const isCurrentRequest = () =>
@@ -845,6 +853,7 @@ const fetchMovieInfo = async (updateHistory = true) => {
       kinopoisk_id: requestedKpId
     }
     void loadSeriesGuide(movieInfo.value, requestedKpId)
+    void movieMetadata.load(movieInfo.value)
 
     navbarStore.setHeaderContent({
       text: movieInfo.value.title,
@@ -1002,6 +1011,7 @@ const syncRandomState = () => {
 }
 
 onUnmounted(async () => {
+  movieMetadata.cancel()
   movieInfoRequests.invalidate()
   seriesGuideRequest += 1
   navbarStore.clearHeaderContent()

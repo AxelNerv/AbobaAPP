@@ -123,7 +123,7 @@ export const resolvePosterChain = (movie = {}) => {
 // доверять сертификатам хостов с постерами — и видит пустые рамки. Там
 // картинки идут через компьютер: /api-backend/img отдаёт их по http.
 // В самом приложении и на обычном сайте адрес не меняется.
-const DEVICE_PROXY_HOSTS = /(^|\.)(kinopoiskapiunofficial\.tech|st\.kp\.yandex\.net|avatars\.mds\.yandex\.net|image\.tmdb\.org|m\.media-amazon\.com)$/i
+const DEVICE_PROXY_HOSTS = /(^|\.)(kinopoiskapiunofficial\.tech|st\.kp\.yandex\.net|avatars\.mds\.yandex\.net|image\.tmdb\.org|m\.media-amazon\.com|s4\.anilist\.co)$/i
 
 const isLanClient = () => {
   if (typeof window === 'undefined' || window.electronAPI) return false
