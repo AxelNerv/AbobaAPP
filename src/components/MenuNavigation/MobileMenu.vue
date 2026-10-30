@@ -2,6 +2,7 @@
   <transition name="slide">
     <nav v-if="isNavbarVisible" class="mobile-navbar" @click.stop>
       <div class="nav-links-wrapper">
+        <SeasonalGhost />
         <ul class="nav-links">
           <li v-for="link in props.links" :key="link.text">
             <!-- Кнопка с action (случайный фильм, поиск по ID и т.д.) -->
@@ -54,6 +55,7 @@
 <script setup>
 import { storeToRefs } from 'pinia'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import SeasonalGhost from '@/components/SeasonalGhost.vue'
 import { useNavbarStore } from '@/store/navbar'
 
 const props = defineProps({

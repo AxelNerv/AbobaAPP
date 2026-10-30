@@ -1,9 +1,26 @@
 <template>
   <section class="card interface-card">
     <div class="card-head"><h2>Интерфейс</h2></div>
-    <p class="card-text">Цвет обводки кнопок, постеров и подсветки. Меняется сразу.</p>
+    <div class="theme-heading">Тема</div>
+    <div class="theme-options" role="group" aria-label="Тема оформления">
+      <button
+        v-for="item in THEMES"
+        :key="item.id"
+        type="button"
+        class="theme-option"
+        :class="[{ active: theme.theme === item.id }, `theme-option--${item.id}`]"
+        :aria-pressed="theme.theme === item.id"
+        @click="requestTheme(item.id)"
+      >
+        <span class="theme-preview" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="theme-copy"><strong>{{ item.name }}</strong><small>{{ item.description }}</small></span>
+        <AppIcon v-if="theme.theme === item.id" name="check" :size="18" class="theme-check" />
+      </button>
+    </div>
+    <p class="theme-hint">Хэллоуин включает сезонные цвета, фон и декор. Классические настройки сохраняются. Смена темы — после подтверждения перезапуска.</p>
+    <p v-if="theme.theme === 'classic'" class="card-text">Цвет обводки кнопок, постеров и подсветки. Меняется сразу.</p>
 
-    <div class="swatches" role="radiogroup" aria-label="Цвет акцента">
+    <div v-if="theme.theme === 'classic'" class="swatches" role="radiogroup" aria-label="Цвет акцента">
       <button
         v-for="preset in ACCENT_PRESETS"
         :key="preset.id"
@@ -39,7 +56,7 @@
       </label>
     </div>
 
-    <div class="bg-row">
+    <div v-if="theme.theme === 'classic'" class="bg-row">
       <span class="bg-label">Фон</span>
       <div class="segmented" role="radiogroup" aria-label="Фон">
         <button
@@ -55,16 +72,56 @@
         </button>
       </div>
     </div>
+    <ThemeConfirmation v-if="pendingTheme" :name="pendingTheme.name" :desktop="!!desktopApi" :busy="applying" :error="transitionError" @cancel="cancelTheme" @confirm="confirmTheme" />
   </section>
 </template>
 
 <script setup>
-import { ACCENT_PRESETS, BACKGROUNDS, useThemeStore } from '@/store/theme'
+import { ACCENT_PRESETS, BACKGROUNDS, THEMES, useThemeStore } from '@/store/theme'
+import AppIcon from '@/components/icons/AppIcon.vue'
+import ThemeConfirmation from './ThemeConfirmation.vue'
+import { ref } from 'vue'
+import { applyThemeAndRestart } from '@/utils/themeTransition'
 
 const theme = useThemeStore()
+const desktopApi = window.electronAPI
+const pendingTheme = ref(null)
+const applying = ref(false)
+const transitionError = ref('')
+const requestTheme = (id) => {
+  if (id === theme.theme || applying.value) return
+  transitionError.value = ''
+  pendingTheme.value = THEMES.find(item => item.id === id)
+}
+const cancelTheme = () => { if (!applying.value) pendingTheme.value = null }
+const confirmTheme = async () => {
+  if (applying.value || !pendingTheme.value) return
+  applying.value = true
+  try {
+    await applyThemeAndRestart(theme, pendingTheme.value.id, desktopApi, () => window.location.reload())
+    pendingTheme.value = null
+  } catch (error) {
+    transitionError.value = error?.message || 'Не удалось применить тему.'
+  } finally { applying.value = false }
+}
 </script>
 
 <style scoped>
+.theme-heading { margin: 20px 0 10px; font-size: 13px; color: var(--text-secondary); }
+.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.theme-option { position: relative; padding: 8px; min-width: 0; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); color: var(--text-color); text-align: left; cursor: pointer; transition: border-color 180ms, background-color 180ms; }
+.theme-option:hover { border-color: var(--border-hover); }
+.theme-option.active { border-color: var(--accent-color); background: rgba(var(--accent-rgb), .06); }
+.theme-option:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+.theme-preview { display: flex; align-items: end; gap: 7px; height: 82px; padding: 12px; border-radius: 7px; background: radial-gradient(ellipse at top, #281538, #080d19); }
+.theme-option--halloween .theme-preview { background: linear-gradient(#140c1466, #140c1466), url('@/assets/halloween-night.webp') center / cover; }
+.theme-preview span { width: 27px; height: 38px; border-radius: 4px; border: 1px solid #ffffff20; background: #ffffff0a; }
+.theme-copy { display: grid; gap: 5px; padding: 12px 24px 6px 4px; }
+.theme-copy strong { font-size: 14px; font-weight: 600; }
+.theme-copy small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.theme-check { position: absolute; right: 12px; bottom: 33px; color: var(--accent-color); }
+.theme-hint { margin: 12px 0 20px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+@media (max-width: 400px) { .theme-options { grid-template-columns: 1fr; } }
 .card {
   min-width: 0;
   background: rgba(15, 20, 32, 0.72);

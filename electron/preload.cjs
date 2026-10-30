@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBackendStatus: (callback) => subscribe('app:backend-status', callback),
   onRestored: (callback) => subscribe('app:restored', callback),
   saveSettings: (settings) => ipcRenderer.invoke('app:settings', settings),
+  restartForTheme: () => ipcRenderer.invoke('app:restart-theme'),
+  setWindowTheme: (theme) => ipcRenderer.invoke('app:window-theme', theme),
   openLogs: () => ipcRenderer.invoke('app:open-logs'),
   createBackup: () => ipcRenderer.invoke('app:backup'),
   restoreBackup: () => ipcRenderer.invoke('app:restore'),

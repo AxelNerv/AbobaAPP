@@ -6,6 +6,7 @@
         <AppIcon name="close" :size="16" />
       </button>
       <div class="settings-modal__scroll">
+        <SeasonalGhost class="settings-ghost" />
         <ShareWifi embedded />
       </div>
     </div>
@@ -15,6 +16,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import SeasonalGhost from '@/components/SeasonalGhost.vue'
 import ShareWifi from '@/components/ShareWifi.vue'
 import { useNavbarStore } from '@/store/navbar'
 
@@ -30,6 +32,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 </script>
 
 <style scoped>
+.settings-ghost { position: absolute; right: 64px; top: 12px; width: 40px; height: 44px; }
 .settings-modal {
   position: fixed;
   inset: 0;

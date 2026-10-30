@@ -1,0 +1,106 @@
+// All rules are scoped to the seasonal theme; embedded provider iframes are untouched.
+html[data-theme='halloween'] {
+  --seasonal-wine: #84384a;
+  --text-color: #eadfd9;
+  --text-secondary: #b8a9b1;
+  --neon-glow: 0 0 12px rgba(196, 128, 99, .12);
+  --neon-glow-hover: 0 0 16px rgba(196, 128, 99, .2);
+
+  .settings-title, .content-title, .dialog-heading h2, .theme-confirmation h2 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 600;
+    letter-spacing: .015em;
+  }
+  .sidebar, .mobile-navbar {
+    background: linear-gradient(180deg, #21131d, #100c13 55%);
+    border-color: #6c3d4544;
+  }
+  .sidebar::after {
+    content: ''; position: absolute; right: 0; top: 60px; width: 58px; height: 52px;
+    background: url('./halloween-web.svg') right top / contain no-repeat;
+    opacity: .34; pointer-events: none;
+  }
+  .sidebar-logo {
+    background: linear-gradient(135deg, #bc825c, #744255);
+    color: #180f16;
+    box-shadow: 0 0 16px #bd794a22;
+    animation: lantern-breathe 6s ease-in-out infinite;
+  }
+  .sidebar .nav-item { color: #b8a4b1; }
+  .sidebar .nav-item:hover, .sidebar .router-link-active { color: #ecd1bc; background: #a8644a18; }
+  .settings-modal__content, .interface-card, .settings-grid > .card {
+    background: rgba(23, 16, 25, .95);
+    border-color: #a5655040;
+  }
+  .settings-modal__content::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 70px; height: 60px;
+    background: url('./halloween-web.svg') center / contain no-repeat;
+    transform: scaleX(-1); opacity: .4; pointer-events: none;
+  }
+  .player-btn, .btn-primary, .auth-gate-btn, .random-button, .search-button, .nav-item.action-btn, .segment.active, .theme-option { position: relative; }
+  .player-btn, .btn-primary, .auth-gate-btn, .random-button, .search-button {
+    background: linear-gradient(110deg, #3a232a, #241923);
+    color: #eed9c7; border-color: #a86b505c;
+  }
+  .player-btn::after, .btn-primary::after, .auth-gate-btn::after, .random-button::after, .search-button::after, .theme-option--halloween .theme-preview::after {
+    content: ''; position: absolute; right: 18px; bottom: -8px; width: 51px; height: 21px;
+    background: url('./halloween-pumpkins.svg') center / contain no-repeat;
+    pointer-events: none; opacity: .85;
+  }
+  .theme-option--halloween::after {
+    content: ''; position: absolute; right: 2px; top: 2px; width: 48px; height: 42px;
+    background: url('./halloween-web.svg') center / contain no-repeat; opacity: .6; pointer-events: none;
+  }
+  .sidebar .nav-item.action-btn::after, .segment.active::after {
+    content: ''; position: absolute; left: 4px; right: 4px; bottom: -5px; height: 9px;
+    background: url('./halloween-drip.svg') center / 100% 100% no-repeat; pointer-events: none; opacity: .7;
+  }
+  .player-btn:hover, .btn-primary:hover, .auth-gate-btn:hover { border-color: #cd927080; box-shadow: 0 0 14px #b76c3920; }
+  .theme-preview { position: relative; border: 1px solid #c5894d18; }
+  .settings-ghost { z-index: 1; }
+  .bell-btn {
+    color: #d6ad91;
+    background: rgba(35, 21, 31, .94);
+    border-color: #9b69525c;
+  }
+  .bell-btn:hover, .bell-btn.active { color: #f0c9a3; background: #3a252d; border-color: #bd826b80; }
+  &.is-desktop-app .app-drag-strip { background: #100c13; border-bottom-color: #a46f5038; }
+  .lib-card, .movie-card { overflow: visible; isolation: isolate; }
+  .lib-poster { border-radius: 13px 13px 0 0; }
+  .lib-card::before, .movie-card::before {
+    content: ''; position: absolute; top: 0; right: 0; width: 43px; height: 39px;
+    background: url('./halloween-web.svg') center / contain no-repeat;
+    pointer-events: none; z-index: 5; opacity: .68;
+  }
+  .lib-card::after, .movie-card::after {
+    content: ''; position: absolute; left: 6px; right: 6px; bottom: -9px; height: 14px;
+    background: url('./halloween-drip.svg') center / 100% 100% no-repeat;
+    pointer-events: none; z-index: 5; opacity: .8;
+    transform-origin: top; transform: scaleY(.55);
+  }
+  // Only the card being used animates, not a hundred offscreen posters.
+  .lib-card:hover::after, .lib-card:focus-within::after,
+  .movie-card:hover::after, .movie-card:focus-within::after { animation: poster-drip 3.8s ease-in-out infinite; }
+  .lib-search { position: relative; }
+  .lib-search::before {
+    content: ''; position: absolute; left: 20px; top: -22px; width: 67px; height: 26px;
+    background: url('./halloween-pumpkins.svg') center / contain no-repeat;
+    pointer-events: none; z-index: 2; opacity: .9;
+  }
+  .settings-btn { position: relative; overflow: visible; }
+  .settings-btn::after {
+    content: ''; position: absolute; left: 7px; top: 22px; width: 26px; height: 52px;
+    background: url('./halloween-lantern.svg') center / contain no-repeat;
+    pointer-events: none; transform-origin: top center;
+    animation: hanging-lantern 7s ease-in-out infinite;
+  }
+}
+@keyframes poster-drip { 50% { transform: scaleY(1); opacity: .95; } }
+@keyframes hanging-lantern { 0%, 100% { opacity: .67; transform: rotate(-3deg); } 45% { opacity: .94; transform: rotate(3deg); } 70% { opacity: .78; } }
+@keyframes lantern-breathe { 50% { box-shadow: 0 0 20px #bd794a38; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme='halloween'] .sidebar-logo { animation: none; }
+  html[data-theme='halloween'] .settings-btn::after,
+  html[data-theme='halloween'] .lib-card::after,
+  html[data-theme='halloween'] .movie-card::after { animation: none !important; }
+}

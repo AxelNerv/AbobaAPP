@@ -19,6 +19,11 @@ export const BACKGROUNDS = [
   { id: 'plain', name: 'Тёмный' }
 ]
 
+export const THEMES = [
+  { id: 'classic', name: 'Классическая', description: 'Привычное оформление AbobaTV' },
+  { id: 'halloween', name: 'Хэллоуин', description: 'Осенняя ночь, фонари и немного магии' }
+]
+
 const DEFAULT_CUSTOM = '#ff4081'
 
 const createNoopStorage = () => ({
@@ -54,6 +59,7 @@ export const paletteFor = (hex) => {
 
 export const useThemeStore = defineStore('theme', {
   state: () => ({
+    theme: 'classic',
     accent: 'cyan',
     customColor: DEFAULT_CUSTOM,
     background: 'glow'
@@ -61,12 +67,16 @@ export const useThemeStore = defineStore('theme', {
 
   getters: {
     palette: (state) =>
-      state.accent === 'custom'
+      state.theme === 'halloween' ? paletteFor('#c48063') : state.accent === 'custom'
         ? paletteFor(state.customColor)
         : ACCENT_PRESETS.find((preset) => preset.id === state.accent) || ACCENT_PRESETS[0]
   },
 
   actions: {
+    setTheme(id) {
+      this.theme = THEMES.some((item) => item.id === id) ? id : 'classic'
+      this.apply()
+    },
     setAccent(id) {
       this.accent = id === 'custom' || ACCENT_PRESETS.some((preset) => preset.id === id) ? id : 'cyan'
       this.apply()
@@ -93,10 +103,17 @@ export const useThemeStore = defineStore('theme', {
       root.style.setProperty('--accent-hover', palette.hover)
       root.style.setProperty('--accent-light', palette.light)
       root.style.setProperty('--accent-dark', palette.dark)
-      root.dataset.bg = this.background
+      root.dataset.bg = this.theme === 'halloween' ? 'glow' : this.background
+      root.dataset.theme = THEMES.some((item) => item.id === this.theme) ? this.theme : 'classic'
+      if (window.electronAPI?.setWindowTheme) {
+        void window.electronAPI.setWindowTheme(root.dataset.theme).catch((error) => {
+          console.error('[theme] не удалось обновить системную панель:', error)
+        })
+      }
     },
 
     initTheme() {
+      if (!THEMES.some((item) => item.id === this.theme)) this.theme = 'classic'
       this.apply()
     }
   },
@@ -104,6 +121,6 @@ export const useThemeStore = defineStore('theme', {
   persist: {
     key: 'aboba-theme',
     storage: typeof window !== 'undefined' ? window.localStorage : createNoopStorage(),
-    paths: ['accent', 'customColor', 'background']
+    pick: ['theme', 'accent', 'customColor', 'background']
   }
 })

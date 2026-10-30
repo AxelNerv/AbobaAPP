@@ -387,6 +387,11 @@ handle('share:open-firewall', async () => {
 })
 
 handle('app:version', () => app.getVersion())
+handle('app:window-theme', (theme) => require('./windowTheme.cjs').setWindowTheme(mainWindow, theme))
+handle('app:restart-theme', require('./themeRestart.cjs').createThemeRestart({
+  app, isBusy: () => maintenance,
+  beforeQuit: () => { quitting = true }
+}))
 handle('update:status', () => ({ ...updater.status(), current: app.getVersion() }))
 handle('update:check', async () => ({ ...(await updater.check()), current: app.getVersion() }))
 handle('update:install', () => updater.install())

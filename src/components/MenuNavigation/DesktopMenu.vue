@@ -61,6 +61,7 @@
       </div>
     </nav>
 
+    <SeasonalGhost class="sidebar-ghost" />
     <!-- Tooltip в свёрнутом виде -->
     <div v-if="!isSidebarOpen && activeTooltip !== null" class="tooltip" :style="tooltipStyle">
       {{ tooltipText }}
@@ -71,6 +72,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import SeasonalGhost from '@/components/SeasonalGhost.vue'
 import { useRoute } from 'vue-router'
 import { useNavbarStore } from '@/store/navbar'
 
@@ -150,6 +152,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+.sidebar-ghost { flex-shrink: 0; width: 40px; height: 48px; margin: 16px 0 8px; }
 .sidebar {
   position: fixed;
   left: 0; top: 0; bottom: 0;

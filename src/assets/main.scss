@@ -1,4 +1,5 @@
 @use './controls.scss';
+@use './halloween.scss';
 // FontAwesome больше не подключается: все иконки переведены на Lucide
 // (см. components/icons/AppIcon.vue), поэтому шрифт с ~2000 глифов и его
 // три woff2-файла из сборки убраны.
@@ -92,6 +93,25 @@ html[data-bg='poster'].has-page-poster body::before {
   filter: blur(40px) saturate(1.3) brightness(0.35);
 }
 
+/* Seasonal theme changes surfaces, not the user's accent/background preference.
+   Static WebP and SVG only: no video, canvas, particles or animation loop. */
+html[data-theme='halloween'] {
+  --bg-primary: #0c090f;
+  --bg-secondary: #141017;
+  --bg-tertiary: #1b141e;
+  --bg-modal: rgba(20, 14, 23, .98);
+  --bg-side: #100c13;
+  --bg-card: rgba(217, 153, 103, .045);
+  --border-color: rgba(224, 173, 133, .1);
+}
+html[data-theme='halloween'][data-bg='glow'] body::before,
+html[data-theme='halloween'][data-bg='poster']:not(.has-page-poster) body::before {
+  background: linear-gradient(rgba(12, 9, 15, .34), rgba(12, 9, 15, .56)), url('./halloween-night.webp') center / cover no-repeat;
+}
+html[data-theme='halloween'][data-bg='accent'] body::before {
+  background: linear-gradient(rgba(var(--accent-rgb), .04), rgba(12, 9, 15, .62)), url('./halloween-night.webp') center / cover no-repeat;
+}
+html[data-theme='halloween'].is-desktop-app .app-drag-strip { background: var(--bg-side); }
 html.no-scroll, body.no-scroll { overflow: hidden; height: 100%; }
 
 button, select, input { font-family: 'Inter', system-ui, sans-serif; }
