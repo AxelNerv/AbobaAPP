@@ -1,4 +1,4 @@
-"""Independent player lookup; only reachable embeds enter the result."""
+"""Player lookup with embed probes; transient Turbo failures remain candidates."""
 import asyncio
 from collections import OrderedDict
 import html
@@ -158,9 +158,18 @@ class MovieSources:
             translations = []
         cleaned = {**provider, "translations": [t for t in translations
                    if isinstance(t, dict) and allowed_embed(t.get("iframeUrl"))]}
+        host = (urlparse(url).hostname or "").lower()
+        browser_turbo = (str(provider.get("type", "")).lower() == "turbo"
+                         and (host == "obrut.show" or host.endswith(".obrut.show")))
+
+        def unverified(reason):
+            # A server-side probe is not playback. A temporary network error
+            # must not remove a valid Turbo candidate from the browser's list.
+            print(f"[sources] Turbo: {reason}; browser playback not verified")
+            return {**cleaned, "browserOnly": True, "probeIssue": reason}, {}
+
         try:
             async with self.probe_slots:
-                host = (urlparse(url).hostname or "").lower()
                 for _ in range(3):
                     async with session.get(url, headers=page_headers, allow_redirects=False,
                                            timeout=aiohttp.ClientTimeout(total=4, connect=2)) as response:
@@ -174,10 +183,8 @@ class MovieSources:
                             url = target
                             continue
                         # Turbo's HTTP 403 probe can still play in Electron.
-                        if (response.status == 403 and str(provider.get("type", "")).lower() == "turbo"
-                                and (host == "obrut.show" or host.endswith(".obrut.show"))):
-                            print("[sources] Turbo: HTTP 403 to probe; loading in browser")
-                            return {**cleaned, "browserOnly": True}, {}
+                        if browser_turbo and (response.status in (403, 408, 429) or response.status >= 500):
+                            return unverified(f"probe HTTP {response.status}")
                         if response.status != 200:
                             print(f"[sources] {provider.get('type')}: embed HTTP {response.status}")
                             return None
@@ -189,6 +196,8 @@ class MovieSources:
                 raise ValueError("too many embed redirects")
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
             print(f"[sources] {provider.get('type')}: embed {type(error).__name__}")
+            if browser_turbo and isinstance(error, (aiohttp.ClientError, asyncio.TimeoutError)):
+                return unverified(type(error).__name__)
             return None
 
 

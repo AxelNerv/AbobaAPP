@@ -38,6 +38,7 @@
       <div class="iframe-wrapper" :style="!theaterMode ? iframeWrapperStyle : {}">
         <iframe
           v-show="!iframeLoading && selectedPlayerInternal?.iframe"
+          :key="iframeGeneration"
           ref="playerIframe"
           :src="selectedPlayerInternal?.iframe"
           :title="movieInfo?.title ? `Плеер для ${movieInfo.title}` : 'Видео-плеер'"
@@ -264,6 +265,7 @@ import PlayerModal from '@/components/PlayerModal.vue'
 import { hasAllohaUhd } from '@/api/playerQuality'
 import { getWatchProgress, saveWatchProgress } from '@/api/user'
 import { formatProgress, playerFamily, summarizeProgress } from '@/utils/watchProgress'
+import { createPlaybackStallDetector } from '@/utils/playbackStall'
 
 const mainStore = useMainStore()
 const playerStore = usePlayerStore()
@@ -283,6 +285,7 @@ const emit = defineEmits(['update:selectedPlayer', 'update:movieInfo'])
 const playersInternal = ref([])
 const selectedPlayerInternal = ref(null)
 const iframeLoading = ref(true)
+const iframeGeneration = ref(0)
 const theaterMode = ref(false)
 const closeButtonVisible = ref(false)
 const playerIframe = ref(null)
@@ -408,7 +411,7 @@ const markUhdPlayers = async () => {
   if (uhd && playersInternal.value === list) alloha.uhd = true
 }
 
-const applyPlayersData = (players) => {
+const applyPlayersData = (players, append = false) => {
   const dedupedPlayers = []
   const seenProviders = new Set()
 
@@ -437,12 +440,30 @@ const applyPlayersData = (players) => {
   // для плееров с одинаковым приоритетом)
   dedupedPlayers.sort((a, b) => playerPriorityIndex(a) - playerPriorityIndex(b))
 
-  playersInternal.value = dedupedPlayers
-  // Новый список плееров — сбрасываем историю авто-скипов
-  autoTriedKeys.value = new Set()
+  // Keep temporarily failed players selectable. A slow iframe must not make
+  // Turbo disappear for the rest of this movie's mounted lifetime.
+  const oldPlayers = append ? playersInternal.value : []
+  if (append) {
+    for (const player of dedupedPlayers) {
+      const old = oldPlayers.find(old => old.key === player.key)
+      if (old && (old.iframe !== player.iframe || old.source !== player.source)) autoTriedKeys.value.delete(player.key)
+    }
+  }
+  playersInternal.value = [...dedupedPlayers, ...oldPlayers.filter(old =>
+    !dedupedPlayers.some(player => player.key === old.key))]
+    .sort((a, b) => playerPriorityIndex(a) - playerPriorityIndex(b))
+  if (!append) autoTriedKeys.value = new Set()
   markUhdPlayers()
 
   if (playersInternal.value.length === 0) return
+  if (append) {
+    selectedPlayerInternal.value = playersInternal.value.find(player => !autoTriedKeys.value.has(player.key)) || null
+    if (!selectedPlayerInternal.value) {
+      iframeLoading.value = false
+      window.__toast?.('Не удалось загрузить резерв. Можно повторно выбрать источник.', 6000)
+    }
+    return
+  }
 
   // Пробуем восстановить ранее выбранный плеер для этого фильма
   let restoredFromStorage = null
@@ -522,7 +543,7 @@ const centerPlayer = () => {
 let playerRequest = null
 let playerDisposed = false
 const failedPlayerSources = new Set()
-const fetchPlayers = async () => {
+const fetchPlayers = async (append = false) => {
   if (playerDisposed) return
   playerRequest?.abort()
   const request = new AbortController()
@@ -541,7 +562,7 @@ const fetchPlayers = async () => {
       signal: request.signal
     })
     if (request.signal.aborted || playerDisposed) return
-    applyPlayersData(players)
+    applyPlayersData(players, append)
     // Если после всех источников плееров нет — останавливаем спираль
     if (playersInternal.value.length === 0) {
       iframeLoading.value = false
@@ -549,6 +570,11 @@ const fetchPlayers = async () => {
   } catch (error) {
     if (request.signal.aborted || playerDisposed) return
     iframeLoading.value = false
+    console.error('Ошибка при загрузке плееров:', error)
+    if (append && playersInternal.value.length) {
+      window.__toast?.('Резервные источники не ответили. Можно повторно выбрать плеер.', 6000)
+      return
+    }
     if (error?.allSourcesDown) {
       // Важно отличать от «плееров нет»: тут фильм ни при чём, лежат источники.
       // Раньше оба случая выглядели одинаково — пустой список без объяснений.
@@ -560,7 +586,6 @@ const fetchPlayers = async () => {
       errorMessage.value = message
       errorCode.value = code
     }
-    console.error('Ошибка при загрузке плееров:', error)
   } finally {
     if (playerRequest === request) playerRequest = null
   }
@@ -793,7 +818,11 @@ const handlePlayerSelect = (player) => {
     return
   }
 
+  // The list remains usable while reserves load; a late response must not
+  // overwrite a source the user has just selected manually.
+  playerRequest?.abort()
   selectedPlayerInternal.value = player
+  autoTriedKeys.value.delete(player.key)
 
   // Сохраняем выбранный плеер чтобы при следующем заходе на этот же фильм
   // он подгрузился автоматически
@@ -845,16 +874,15 @@ const goToNextWorkingPlayer = () => {
   const fresh = sources.filter(source => !failedPlayerSources.has(source))
   if (!fresh.length) {
     iframeLoading.value = false
-    errorMessage.value = 'Ни один плеер не загрузился. Попробуйте открыть фильм позже.'
-    errorCode.value = 503
+    selectedPlayerInternal.value = null
+    window.__toast?.('Ни один плеер не загрузился. Источники сохранены для повторного выбора.', 6000)
     return
   }
   for (const source of fresh) failedPlayerSources.add(source)
   clearLoadWatchdog()
   selectedPlayerInternal.value = null
-  playersInternal.value = []
   iframeLoading.value = true
-  void fetchPlayers()
+  void fetchPlayers(true)
 }
 
 const startLoadWatchdog = () => {
@@ -888,6 +916,52 @@ let lastProgressSnapshot = ''
 let progressKpId = ''
 const progressIssueAt = new Map()
 const progressToastShown = new Set()
+
+// An iframe load event says nothing about a video stalled on episode four.
+// Desktop can inspect Turbo's media element without bypassing web security.
+const stallDetector = createPlaybackStallDetector()
+let playbackTimer = null
+let playbackBusy = false
+let lastPlaybackRecovery = -Infinity
+const checkPlayback = async () => {
+  const current = selectedPlayerInternal.value
+  if (playerDisposed || playbackBusy || !current || !window.electronAPI?.player?.readPlayback) return
+  playbackBusy = true
+  try {
+    const state = await window.electronAPI.player.readPlayback(current.iframe)
+    if (playerDisposed || current !== selectedPlayerInternal.value) return
+    if (!stallDetector.sample(state, Date.now())) return
+    stallDetector.reset()
+    // One same-player reload per five minutes; a failed CDN must not produce
+    // an endless restart loop. The next failure tries the existing reserves.
+    if (Date.now() - lastPlaybackRecovery < 300_000) {
+      console.warn('[player] Turbo повторно завис после восстановления; пробуем резерв')
+      goToNextWorkingPlayer()
+      return
+    }
+    lastPlaybackRecovery = Date.now()
+    console.warn('[player] Turbo: видео не продвигается 45 секунд; восстанавливаем iframe')
+    let snapshot = null
+    try {
+      snapshot = await window.electronAPI.player.readProgress(current.iframe)
+    } catch (error) {
+      reportProgressIssue('позиция перед восстановлением Turbo', error)
+    }
+    if (playerDisposed || current !== selectedPlayerInternal.value) return
+    if (snapshot?.entries && Object.keys(snapshot.entries).length) {
+      await sendRestore(snapshot.frames || snapshot.entries, current.iframe, summarizeProgress(snapshot.entries))
+    } else {
+      restoreProgressFor(current)
+    }
+    if (playerDisposed || current !== selectedPlayerInternal.value) return
+    iframeLoading.value = true
+    iframeGeneration.value++
+    startLoadWatchdog()
+    window.__toast?.('Turbo завис. Восстанавливаем плеер.', 5000)
+  } catch (error) {
+    reportProgressIssue('проверка зависания Turbo', error)
+  } finally { playbackBusy = false }
+}
 
 const reportProgressIssue = (stage, error, notify = false) => {
   const now = Date.now()
@@ -1001,6 +1075,7 @@ const saveProgress = async () => {
 }
 
 watch(selectedPlayerInternal, (newVal) => {
+  stallDetector.reset()
   if (newVal) {
     restoreProgressFor(newVal)
     iframeLoading.value = true
@@ -1060,6 +1135,7 @@ const toggleFavorite = async () => {
 const showFavoriteTooltip = computed(() => playerStore.showFavoriteTooltip)
 
 onMounted(async () => {
+  if (window.electronAPI?.player?.readPlayback) playbackTimer = setInterval(() => void checkPlayback(), 10_000)
   if (progressSupported) {
     progressTimer = setInterval(() => {
       void saveProgress().catch((error) => reportProgressIssue('фоновое сохранение', error, true))
@@ -1086,6 +1162,7 @@ onBeforeUnmount(() => {
   playerRequest?.abort()
   clearLoadWatchdog()
   clearInterval(progressTimer)
+  clearInterval(playbackTimer)
   void saveProgress().catch((error) => reportProgressIssue('финальное сохранение', error, true))
 
   window.removeEventListener('resize', updateScaleFactor)

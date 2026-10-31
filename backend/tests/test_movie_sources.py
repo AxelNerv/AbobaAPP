@@ -127,6 +127,28 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(SourceUnavailable):
             await self.get()
 
+    async def test_transient_turbo_probe_http_failures_keep_candidate(self):
+        for status in (408, 429, 502, 503):
+            self.broken_status = status
+            self.api_data = {"data": [{"type": "Turbo", "iframeUrl": "https://x.obrut.show/broken"}]}
+            self.service.cache.clear()
+            result = await self.get()
+            self.assertEqual(result["providers"][0]["type"], "Turbo")
+            self.assertIn(str(status), result["providers"][0]["probeIssue"])
+
+    async def test_turbo_connection_timeout_does_not_remove_candidate(self):
+        provider = {"type": "Turbo", "iframeUrl": "https://x.obrut.show/working"}
+        class TimedOutSession:
+            def get(self, *args, **kwargs):
+                raise asyncio.TimeoutError()
+        result = await self.service._probe(provider, TimedOutSession(), {})
+        self.assertEqual(result[0]["iframeUrl"], provider["iframeUrl"])
+        self.assertTrue(result[0]["browserOnly"])
+        # Neither unrelated hosts nor a different provider inherit this rule.
+        for other in ({**provider, "type": "Collaps"},
+                      {**provider, "iframeUrl": "https://api.nextembed.ws/working"}):
+            self.assertIsNone(await self.service._probe(other, TimedOutSession(), {}))
+
     async def test_cancelling_one_consumer_does_not_cancel_other(self):
         one = asyncio.create_task(self.get())
         two = asyncio.create_task(self.get())

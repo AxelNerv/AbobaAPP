@@ -1,6 +1,7 @@
 <template>
-  <div class="spinner-wrapper">
-    <img src="@/assets/icon-spinner.svg" alt="Loading..." class="spinner" />
+  <div class="spinner-wrapper" role="status" aria-label="Загрузка">
+    <img src="@/assets/icon-spinner.svg" alt="" aria-hidden="true" class="spinner spinner--classic" />
+    <img src="@/assets/halloween-loading-pumpkin.svg" alt="" aria-hidden="true" class="spinner spinner--pumpkin" />
     <p v-if="text" class="spinner-text">{{ text }}</p>
   </div>
 </template>
@@ -45,6 +46,23 @@ defineProps({
   color: #fff;
   font-size: 14px;
   text-align: center;
+}
+
+.spinner--pumpkin { display: none; }
+:global(html[data-theme='halloween'] .spinner--classic) { display: none; }
+:global(html[data-theme='halloween'] .spinner--pumpkin) {
+  display: block;
+  animation: pumpkin-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes pumpkin-breathe {
+  0%, 100% { transform: translateY(2px) rotate(-3deg); opacity: .76; }
+  50% { transform: translateY(-3px) rotate(3deg); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  :global(html[data-theme='halloween'] .spinner--pumpkin) { animation: none; }
 }
 
 @keyframes spin {

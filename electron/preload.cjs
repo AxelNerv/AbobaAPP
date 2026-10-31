@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Позиция просмотра внутри плеера (серия, таймкод)
   player: {
+    readPlayback: (src) => ipcRenderer.invoke('player:read-playback', String(src || '')),
     readProgress: (src) => ipcRenderer.invoke('player:read-progress', String(src || '')),
     restoreProgress: (entries, src, resume) =>
       ipcRenderer.invoke('player:restore-progress', entries, String(src || ''), resume || null)

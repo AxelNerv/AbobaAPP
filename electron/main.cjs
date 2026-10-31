@@ -19,6 +19,7 @@ const adblock = require('./adblock.cjs')
 const { installLogger } = require('./logger.cjs')
 const backups = require('./backups.cjs')
 const playerProgress = require('./playerProgress.cjs')
+const { readPlayback } = require('./playerPlayback.cjs')
 const updater = require('./updater.cjs')
 
 const APP_ROOT = path.join(__dirname, '..')
@@ -350,6 +351,7 @@ handle('player:read-progress', async (src) => {
   }
 })
 handle('player:restore-progress', async (entries, src, resume) => restorePlayerProgress(entries, String(src || ''), resume))
+handle('player:read-playback', (src) => readPlayback(mainWindow.webContents, String(src || '')))
 
 handle('share:status', async () => ({
   active: lanShare.isSharing(),

@@ -68,8 +68,11 @@ html[data-theme='halloween'] {
   .lib-card, .movie-card { overflow: visible; isolation: isolate; }
   .lib-poster { border-radius: 13px 13px 0 0; }
   .lib-card::before, .movie-card::before {
-    content: ''; position: absolute; top: 0; right: 0; width: 43px; height: 39px;
-    background: url('./halloween-web.svg') center / contain no-repeat;
+    content: ''; position: absolute; top: -13px; right: -5px; width: calc(100% + 10px); height: 52px;
+    background:
+      url('./halloween-bat.svg') left top / 31px 18px no-repeat,
+      url('./halloween-bat.svg') right top / 26px 15px no-repeat,
+      url('./halloween-web.svg') right 5px top 13px / 43px 39px no-repeat;
     pointer-events: none; z-index: 5; opacity: .68;
   }
   .lib-card::after, .movie-card::after {
