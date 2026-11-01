@@ -34,10 +34,14 @@ const getSources = (kpId) => {
 
 export const getPlayers = async (kpId, options = {}) => {
   if (options.signal?.aborted) throw options.signal.reason
-  const { providers } = await waitForSharedRequest(getSources(kpId), options.signal)
-  // Veoveo is fetched from an independent API and passed real film playback.
-  // The relay's Turbo/VideoSeed/Alloha were tested but did not play this film.
-  const playable = providers.filter((provider) => /^(turbo|collaps|veoveo)$/i.test(String(provider.type)))
+  const { providers, type } = await waitForSharedRequest(getSources(kpId), options.signal)
+  // The new Veoveo relay passed playback and seeking on three dramas. It has
+  // not been verified for films, so those retain the existing reserve only.
+  const playable = providers.filter((provider) => {
+    if (!/^(turbo|collaps|veoveo)$/i.test(String(provider.type))) return false
+    const host = (() => { try { return new URL(provider.iframeUrl).hostname } catch { return '' } })()
+    return host !== 'player.shortener2.link' || type === 'TV_SERIES'
+  })
   // Foreign-language translations do not replace the Russian player selection.
   const russian = playable.map((provider) => ({
     ...provider,
@@ -45,7 +49,14 @@ export const getPlayers = async (kpId, options = {}) => {
       !/украин|укр\.|\bUA\b|[іїєґ]|english|английск|субтитр|subtitles|^оригинальный$/i.test(translation?.name || '')
     )
   }))
-  return toPlayersMap(russian, { ...options, source: 'fbp' })
+  const players = toPlayersMap(russian, { ...options, source: 'fbp' })
+  for (const player of Object.values(players)) {
+    if (String(player.provider).toLowerCase() !== 'veoveo') continue
+    const host = new URL(player.iframe).hostname
+    player.providerVariant = host.split('.').slice(-2).join('.')
+    player.variantLabel = host === 'player.shortener2.link' ? 'Резерв для сериалов и дорам' : 'Дополнительный резерв'
+  }
+  return players
 }
 
 export const getKpInfo = async (kpId, { signal } = {}) => {

@@ -11,9 +11,11 @@
       <IdSearchModal v-if="navbarStore.isModalIdSearchVisible" />
     </transition>
 
-    <transition name="fade">
-      <SettingsModal v-if="navbarStore.isSettingsModalVisible" />
-    </transition>
+    <Teleport to="body">
+      <transition name="fade">
+        <SettingsModal v-if="navbarStore.isSettingsModalVisible" />
+      </transition>
+    </Teleport>
 
     <!-- Модалка случайного фильма -->
     <RandomMovieModal

@@ -1,7 +1,8 @@
 <template>
+  <HalloweenIcon v-if="seasonal" :name="name" :size="size" :stroke-width="strokeWidth" class="app-icon app-icon--halloween" />
   <component
     :is="resolved"
-    v-if="resolved"
+    v-else-if="resolved"
     :size="size"
     :stroke-width="strokeWidth"
     :fill="filled ? 'currentColor' : 'none'"
@@ -29,6 +30,9 @@
  * Размер задаётся пропом size (или CSS-классом .app-icon).
  */
 import { computed } from 'vue'
+import { getActivePinia } from 'pinia'
+import { useThemeStore } from '@/store/theme'
+import HalloweenIcon from './HalloweenIcon.vue'
 import {
   ArrowDown,
   ArrowUp,
@@ -195,6 +199,10 @@ const props = defineProps({
   // так состояние читается, а рисунок не прыгает.
   filled: { type: Boolean, default: false }
 })
+
+const theme = getActivePinia() ? useThemeStore() : null
+const seasonalNames = new Set(['home', 'user', 'fingerprint', 'random', 'search', 'settings', 'bell', 'bellOff', 'heart', 'movie', 'series'])
+const seasonal = computed(() => theme?.theme === 'halloween' && seasonalNames.has(props.name))
 
 const resolved = computed(() => {
   const icon = ICONS[props.name]

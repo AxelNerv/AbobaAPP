@@ -82,6 +82,7 @@ const playerLabel = (player) => {
 
 const playerDescription = (player) => {
   const translation = String(player.translate || '').trim()
+  if (player.variantLabel) return player.variantLabel + (translation && translation.toLowerCase() !== playerLabel(player).toLowerCase() ? ` · ${translation}` : '')
   if (translation && translation.toLowerCase() !== playerLabel(player).toLowerCase())
     return translation
   const descriptions = {

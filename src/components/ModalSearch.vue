@@ -13,6 +13,7 @@
           @keydown.down.prevent="focusFirstMovieCard"
           @input="handleInput"
         />
+        <ZombieCaret :input="searchInput" :value="searchTerm" />
       </div>
 
       <!-- Результаты поиска -->
@@ -88,6 +89,7 @@
 </template>
 
 <script setup>
+import ZombieCaret from '@/components/ZombieCaret.vue'
 import { apiSearch } from '@/api/movies'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import ErrorMessage from '@/components/ErrorMessage.vue'

@@ -182,6 +182,21 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.get())["providers"][0]["type"], "Veoveo")
         self.assertEqual(self.calls[-2:], ["/redirect", "/working"])
 
+    async def test_primary_veoveo_uses_only_verified_relay_and_same_host_redirect(self):
+        self.api_data = {"data": [
+            {"type": "Veoveo", "iframeUrl": "https://player.shortener2.link/redirect"},
+            {"type": "Veoveo", "iframeUrl": "https://gorodyshka.link/broken"},
+        ]}
+        result = await self.get()
+        self.assertEqual([p["type"] for p in result["providers"]], ["Veoveo"])
+        self.assertEqual(self.calls[-2:], ["/redirect", "/working"])
+        self.assertNotIn("/broken", self.calls)
+        self.service.cache.clear()
+        self.redirect_target = "http://127.0.0.1/admin"
+        with self.assertRaises(SourceUnavailable):
+            await self.get()
+        self.assertNotIn("/admin", self.calls)
+
     async def test_redirect_cannot_escape_to_another_host_or_loop_forever(self):
         self.service = MovieSources("reyhoho")
         self.api_data = {"data": [{"type": "Veoveo", "iframeUrl": "https://kurolesya.link/redirect"}]}

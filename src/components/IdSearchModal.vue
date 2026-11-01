@@ -36,6 +36,7 @@
           @keydown.enter.prevent="search"
           @keydown.esc="closeModal"
         />
+        <ZombieCaret :input="searchInput" :value="searchTerm" />
         <div class="input-icons">
           <button v-if="searchTerm" class="reset-btn" @click="searchTerm = ''">
             <AppIcon name="close" :size="16" />
@@ -60,6 +61,7 @@
 </template>
 
 <script setup>
+import ZombieCaret from '@/components/ZombieCaret.vue'
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { useRouter } from 'vue-router'

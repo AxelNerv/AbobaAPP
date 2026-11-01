@@ -42,8 +42,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   justify-content: center;
   padding: 24px;
   background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  isolation: isolate;
 }
 
 .settings-modal__content {
@@ -51,6 +50,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   width: 100%;
   max-width: 1120px;
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: rgba(10, 12, 24, 0.97);
@@ -60,6 +62,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 }
 
 .settings-modal__scroll {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
   padding: 24px 26px 26px;
 }
@@ -89,6 +93,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 @media (max-width: 600px) {
   .settings-modal { padding: 8px; }
+  .settings-modal__content { max-height: calc(100dvh - 16px); }
   .settings-modal__scroll { padding: 18px 14px; }
 }
 </style>

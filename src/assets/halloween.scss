@@ -67,23 +67,7 @@ html[data-theme='halloween'] {
   &.is-desktop-app .app-drag-strip { background: #100c13; border-bottom-color: #a46f5038; }
   .lib-card, .movie-card { overflow: visible; isolation: isolate; }
   .lib-poster { border-radius: 13px 13px 0 0; }
-  .lib-card::before, .movie-card::before {
-    content: ''; position: absolute; top: -13px; right: -5px; width: calc(100% + 10px); height: 52px;
-    background:
-      url('./halloween-bat.svg') left top / 31px 18px no-repeat,
-      url('./halloween-bat.svg') right top / 26px 15px no-repeat,
-      url('./halloween-web.svg') right 5px top 13px / 43px 39px no-repeat;
-    pointer-events: none; z-index: 5; opacity: .68;
-  }
-  .lib-card::after, .movie-card::after {
-    content: ''; position: absolute; left: 6px; right: 6px; bottom: -9px; height: 14px;
-    background: url('./halloween-drip.svg') center / 100% 100% no-repeat;
-    pointer-events: none; z-index: 5; opacity: .8;
-    transform-origin: top; transform: scaleY(.55);
-  }
-  // Only the card being used animates, not a hundred offscreen posters.
-  .lib-card:hover::after, .lib-card:focus-within::after,
-  .movie-card:hover::after, .movie-card:focus-within::after { animation: poster-drip 3.8s ease-in-out infinite; }
+  .lib-grid, .grid[class*='card-size-'] { row-gap: 32px; }
   .lib-search { position: relative; }
   .lib-search::before {
     content: ''; position: absolute; left: 20px; top: -22px; width: 67px; height: 26px;
@@ -98,12 +82,9 @@ html[data-theme='halloween'] {
     animation: hanging-lantern 7s ease-in-out infinite;
   }
 }
-@keyframes poster-drip { 50% { transform: scaleY(1); opacity: .95; } }
 @keyframes hanging-lantern { 0%, 100% { opacity: .67; transform: rotate(-3deg); } 45% { opacity: .94; transform: rotate(3deg); } 70% { opacity: .78; } }
 @keyframes lantern-breathe { 50% { box-shadow: 0 0 20px #bd794a38; } }
 @media (prefers-reduced-motion: reduce) {
   html[data-theme='halloween'] .sidebar-logo { animation: none; }
-  html[data-theme='halloween'] .settings-btn::after,
-  html[data-theme='halloween'] .lib-card::after,
-  html[data-theme='halloween'] .movie-card::after { animation: none !important; }
+  html[data-theme='halloween'] .settings-btn::after { animation: none !important; }
 }

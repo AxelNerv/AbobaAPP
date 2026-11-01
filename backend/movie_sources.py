@@ -14,7 +14,7 @@ MAX_BODY = 512 * 1024
 CACHE_TTL = 120
 CACHE_SIZE = 128
 # Fixed destinations: the upstream response must not turn this into an open proxy.
-PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws", "kurolesya.link")
+PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws", "kurolesya.link", "shortener2.link")
 SOURCE_URLS = {"fbp": API_BASE, "reyhoho": "https://api.reyhoho.fun"}
 # The reserve needs its lookup (up to 6 s) plus an embed probe (up to 4 s).
 # A 4 s outer deadline discarded healthy first visits before they completed.
@@ -124,9 +124,11 @@ class MovieSources:
                 # The relay's Turbo, VideoSeed and Alloha did not pass.
                 providers = [p for p in providers if str(p.get("type", "")).lower() == "veoveo"]
             else:
-                # FBP's Veoveo uses another endpoint (redirects/failures in live
-                # checks). It must not shadow the verified independent reserve.
-                providers = [p for p in providers if str(p.get("type", "")).lower() != "veoveo"]
+                # This relay now plays the tested dramas, including seeking.
+                # Keep its exact verified host; older Veoveo endpoints remain
+                # excluded and the independent reserve is preserved separately.
+                providers = [p for p in providers if str(p.get("type", "")).lower() != "veoveo"
+                             or urlparse(str(p.get("iframeUrl", ""))).hostname == "player.shortener2.link"]
             results = await asyncio.gather(*(self._probe(p, session, headers) for p in providers))
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
             raise SourceUnavailable(type(error).__name__) from error

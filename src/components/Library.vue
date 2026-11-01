@@ -16,11 +16,13 @@
         <div class="lib-search">
           <AppIcon name="search" :size="16" class="lib-search-icon" />
           <input
+            ref="librarySearchInput"
             v-model="query"
             type="search"
             class="lib-search-input"
             placeholder="Поиск по библиотеке"
           />
+          <ZombieCaret :input="librarySearchInput" :value="query" />
         </div>
 
         <button v-if="authStore.user" class="lib-logout" @click="logout">Выйти</button>
@@ -88,6 +90,7 @@
 
         <div class="lib-grid">
           <article v-for="item in group.items" :key="item.kp_id" class="lib-card">
+            <SeasonalCardDecor />
             <router-link :to="pathFor(item)" class="lib-poster-link">
               <div class="lib-poster">
                 <img
@@ -132,6 +135,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import SeasonalCardDecor from '@/components/SeasonalCardDecor.vue'
+import ZombieCaret from '@/components/ZombieCaret.vue'
 import { getMyLists, delFromList, delAllFromList, getSyncStatus } from '@/api/user'
 import { useAuthStore } from '@/store/auth'
 import { useMainStore } from '@/store/main'
@@ -139,6 +144,7 @@ import { USER_LIST_TYPES_ENUM } from '@/constants'
 import { getMovieSeoPath } from '@/utils/movieSeo'
 import { deviceImage, resolvePosterByMovie, resolvePosterChain } from '@/utils/mediaUtils'
 
+const librarySearchInput = ref(null)
 const authStore = useAuthStore()
 const mainStore = useMainStore()
 

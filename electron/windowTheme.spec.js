@@ -16,4 +16,15 @@ describe('цвет системной панели', () => {
     setWindowTheme(win, 'halloween', 'darwin')
     expect(win.setTitleBarOverlay).not.toHaveBeenCalled()
   })
+  it('меняет значок работающего окна и трея вместе с темой', () => {
+    const win = { isDestroyed: () => false, setTitleBarOverlay: vi.fn(), setIcon: vi.fn() }
+    const tray = { isDestroyed: () => false, setImage: vi.fn() }
+    const icons = { halloween: '/app/icon-halloween.png', classic: '/app/icon.ico' }
+    setWindowTheme(win, 'halloween', 'win32', { icons, tray })
+    expect(win.setIcon).toHaveBeenLastCalledWith(icons.halloween)
+    expect(tray.setImage).toHaveBeenLastCalledWith(icons.halloween)
+    setWindowTheme(win, 'classic', 'win32', { icons, tray })
+    expect(win.setIcon).toHaveBeenLastCalledWith(icons.classic)
+    expect(tray.setImage).toHaveBeenLastCalledWith(icons.classic)
+  })
 })

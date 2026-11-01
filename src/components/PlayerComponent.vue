@@ -427,11 +427,12 @@ const applyPlayersData = (players, append = false) => {
       continue
     }
 
-    if (providerName && seenProviders.has(providerName)) {
+    const providerIdentity = `${providerName}|${player.providerVariant || ''}`
+    if (providerName && seenProviders.has(providerIdentity)) {
       continue
     }
     if (providerName) {
-      seenProviders.add(providerName)
+      seenProviders.add(providerIdentity)
     }
     dedupedPlayers.push(player)
   }

@@ -29,6 +29,7 @@
             @keydown.down.prevent="focusFirstMovieCard"
             @input="handleInput"
           />
+          <ZombieCaret :input="searchInput" :value="searchTerm" />
           <div class="icons">
             <button v-if="searchTerm" class="reset-button" @click="resetSearch">
               <AppIcon name="close" :size="18" />
@@ -127,6 +128,7 @@ import { hasConsecutiveConsonants, suggestLayout, convertLayout } from '@/utils/
 import { normalizeBasePath } from '@/utils/basePath'
 import debounce from 'lodash.debounce'
 import { nextTick, onBeforeUnmount, onMounted, onServerPrefetch, ref, watch, computed } from 'vue'
+import ZombieCaret from '@/components/ZombieCaret.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import SpinnerLoading from '@/components/SpinnerLoading.vue'

@@ -1,6 +1,6 @@
 {
   "name": "abobatv",
-  "version": "0.3.16",
+  "version": "0.3.17",
   "private": true,
   "type": "module",
   "scripts": {
@@ -69,6 +69,7 @@
       "!electron/**/*.spec.js",
       "!electron/bot.cjs",
       "build/icon.ico",
+      "build/icon-halloween.png",
       "package.json"
     ],
     "extraResources": [

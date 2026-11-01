@@ -389,7 +389,9 @@ handle('share:open-firewall', async () => {
 })
 
 handle('app:version', () => app.getVersion())
-handle('app:window-theme', (theme) => require('./windowTheme.cjs').setWindowTheme(mainWindow, theme))
+handle('app:window-theme', (theme) => require('./windowTheme.cjs').setWindowTheme(mainWindow, theme, process.platform, {
+  icons: { classic: path.join(APP_ROOT, 'build', 'icon.ico'), halloween: path.join(APP_ROOT, 'build', 'icon-halloween.png') }, tray
+}))
 handle('app:restart-theme', require('./themeRestart.cjs').createThemeRestart({
   app, isBusy: () => maintenance,
   beforeQuit: () => { quitting = true }

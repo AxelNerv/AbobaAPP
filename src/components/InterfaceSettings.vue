@@ -12,12 +12,20 @@
         :aria-pressed="theme.theme === item.id"
         @click="requestTheme(item.id)"
       >
-        <span class="theme-preview" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="theme-preview" aria-hidden="true">
+          <span class="theme-preview-cards">
+            <span v-for="card in 3" :key="card" class="theme-preview-card">
+              <span class="theme-preview-art"></span>
+              <span class="theme-preview-caption"><i></i><i></i></span>
+              <SeasonalCardDecor v-if="item.id === 'halloween'" preview />
+            </span>
+          </span>
+        </span>
         <span class="theme-copy"><strong>{{ item.name }}</strong><small>{{ item.description }}</small></span>
         <AppIcon v-if="theme.theme === item.id" name="check" :size="18" class="theme-check" />
       </button>
     </div>
-    <p class="theme-hint">Хэллоуин включает сезонные цвета, фон и декор. Классические настройки сохраняются. Смена темы — после подтверждения перезапуска.</p>
+    <p class="theme-hint">Хэллоуин меняет фон, цвета и карточки: летучие мыши, паутина и стекающие капли. Классические настройки сохраняются. Смена темы — после подтверждения перезапуска.</p>
     <p v-if="theme.theme === 'classic'" class="card-text">Цвет обводки кнопок, постеров и подсветки. Меняется сразу.</p>
 
     <div v-if="theme.theme === 'classic'" class="swatches" role="radiogroup" aria-label="Цвет акцента">
@@ -80,6 +88,7 @@
 import { ACCENT_PRESETS, BACKGROUNDS, THEMES, useThemeStore } from '@/store/theme'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import ThemeConfirmation from './ThemeConfirmation.vue'
+import SeasonalCardDecor from './SeasonalCardDecor.vue'
 import { ref } from 'vue'
 import { applyThemeAndRestart } from '@/utils/themeTransition'
 
@@ -113,9 +122,18 @@ const confirmTheme = async () => {
 .theme-option:hover { border-color: var(--border-hover); }
 .theme-option.active { border-color: var(--accent-color); background: rgba(var(--accent-rgb), .06); }
 .theme-option:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
-.theme-preview { display: flex; align-items: end; gap: 7px; height: 82px; padding: 12px; border-radius: 7px; background: radial-gradient(ellipse at top, #281538, #080d19); }
+.theme-preview { position: relative; display: flex; align-items: end; height: 100px; padding: 12px 14px 18px; border-radius: 7px; background: radial-gradient(ellipse at top, #281538, #080d19); }
 .theme-option--halloween .theme-preview { background: linear-gradient(#140c1466, #140c1466), url('@/assets/halloween-night.webp') center / cover; }
-.theme-preview span { width: 27px; height: 38px; border-radius: 4px; border: 1px solid #ffffff20; background: #ffffff0a; }
+.theme-preview-cards { display: flex; gap: 10px; }
+.theme-preview-card { position: relative; display: block; width: 39px; height: 60px; border-radius: 4px; border: 1px solid #ffffff30; background: #131321; }
+.theme-preview-art { display: block; height: 42px; border-radius: 3px 3px 0 0; background: linear-gradient(155deg, transparent 40%, #191b2c 41% 60%, transparent 61%), radial-gradient(circle at 70% 28%, #b9b0c6 0 9%, transparent 10%), linear-gradient(145deg, #5e5874, #28273d); }
+.theme-preview-card:nth-child(2) .theme-preview-art { filter: hue-rotate(30deg); }
+.theme-preview-card:nth-child(3) .theme-preview-art { filter: hue-rotate(-35deg); }
+.theme-preview-caption { display: grid; gap: 3px; padding: 5px; }
+.theme-preview-caption i { width: 90%; height: 2px; background: #c4bccb77; border-radius: 2px; }
+.theme-preview-caption i + i { width: 45%; opacity: .5; }
+.theme-option--halloween .theme-preview-card { border-color: #ad73596e; background: #21151e; }
+.theme-option--halloween .theme-preview-art { background: linear-gradient(155deg, transparent 40%, #2c1c2e 41% 60%, transparent 61%), radial-gradient(circle at 70% 28%, #d6ab77 0 9%, transparent 10%), linear-gradient(145deg, #715065, #302437); }
 .theme-copy { display: grid; gap: 5px; padding: 12px 24px 6px 4px; }
 .theme-copy strong { font-size: 14px; font-weight: 600; }
 .theme-copy small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }

@@ -14,6 +14,7 @@
     :data-test-id="`movie-card-${movie.kp_id}`"
     tabindex="0"
   >
+    <SeasonalCardDecor />
     <CardsMovieMainContent
       :movie
       :is-history
@@ -33,6 +34,7 @@
 import { onMounted, useTemplateRef, computed } from 'vue'
 import CardMovieDetails from './CardMovieDetails.vue'
 import CardsMovieMainContent from './CardsMovieMainContent.vue'
+import SeasonalCardDecor from '@/components/SeasonalCardDecor.vue'
 import { useBackgroundStore } from '@/store/background'
 import { useMainStore } from '@/store/main'
 import { getMovieSeoPath } from '@/utils/movieSeo'
@@ -79,6 +81,7 @@ onMounted(() => {
 
 <style scoped>
 .movie-card {
+  position: relative;
   --card-radius: 10px;
   --card-bg: rgba(255,255,255,0.04);
   --card-border-color: transparent;

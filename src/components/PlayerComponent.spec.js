@@ -185,6 +185,22 @@ describe('ожидание резервных источников в интер
     expect(modal.props('players').map(player => player.provider)).toEqual(['Turbo', 'Veoveo'])
   })
 
+  it('сохраняет оба разных маршрута Veoveo и переходит между ними при ошибке', async () => {
+    getPlayers.mockResolvedValue({
+      Turbo: { iframe: 'https://x.obrut.show/serial', provider: 'Turbo', source: 'fbp' },
+      'Veoveo 1': { iframe: 'https://player.shortener2.link/serial', provider: 'Veoveo', providerVariant: 'shortener2.link', source: 'fbp' },
+      'Veoveo 2': { iframe: 'https://kurolesya.link/serial', provider: 'Veoveo', providerVariant: 'kurolesya.link', source: 'fbp' }
+    })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    await wrapper.find('.player-btn').trigger('click')
+    expect(wrapper.findComponent({ name: 'PlayerModal' }).props('players')).toHaveLength(3)
+    await wrapper.find('iframe').trigger('error')
+    expect(wrapper.find('iframe').attributes('src')).toContain('shortener2.link')
+    await wrapper.find('iframe').trigger('error')
+    expect(wrapper.find('iframe').attributes('src')).toContain('kurolesya.link')
+  })
+
   it('открывает один список плееров вместо отдельного поиска версий KinoBD', async () => {
     getPlayers.mockResolvedValue({ Turbo: { iframe: 'https://x.obrut.show/film', provider: 'Turbo' } })
     wrapper = createPlayer()

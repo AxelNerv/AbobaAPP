@@ -64,6 +64,27 @@ describe('общая загрузка информации и плееров', (
     expect(Object.values(await getPlayers('687595')).map(p => p.provider)).toEqual(['Turbo', 'Collaps'])
   })
 
+  it('показывает новый маршрут Veoveo для сериалов и сохраняет независимый резерв', async () => {
+    const { getPlayers } = await import('@/api/movies.fbp')
+    httpGet.mockResolvedValue({ data: { kp_id: '1398965', type: 'TV_SERIES', providers: [
+      { type: 'Veoveo', iframeUrl: 'https://player.shortener2.link/serial' },
+      { type: 'Veoveo', iframeUrl: 'https://kurolesya.link/serial' }
+    ] } })
+    const players = Object.values(await getPlayers('1398965'))
+    expect(players).toHaveLength(2)
+    expect(players.map(p => p.providerVariant)).toEqual(['shortener2.link', 'kurolesya.link'])
+    expect(players[0].variantLabel).toContain('дорам')
+  })
+
+  it('не выдаёт непроверенный для фильмов маршрут Veoveo вместо прежнего резерва', async () => {
+    const { getPlayers } = await import('@/api/movies.fbp')
+    httpGet.mockResolvedValue({ data: { kp_id: '258687', type: 'FILM', providers: [
+      { type: 'Veoveo', iframeUrl: 'https://player.shortener2.link/film' },
+      { type: 'Veoveo', iframeUrl: 'https://kurolesya.link/film' }
+    ] } })
+    expect(Object.values(await getPlayers('258687')).map(p => p.providerVariant)).toEqual(['kurolesya.link'])
+  })
+
   it('добавляет независимый Veoveo и сохраняет только русские переводы', async () => {
     const { getPlayers } = await import('@/api/movies.fbp')
     httpGet.mockResolvedValue({ data: { kp_id: '10453010', providers: [

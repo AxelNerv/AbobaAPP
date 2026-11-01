@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import halloweenLogo from '@/assets/halloween-logo.svg'
 
 /**
  * Оформление: цвет акцента (обводка кнопок, постеров, подсветка фокуса)
@@ -105,6 +106,10 @@ export const useThemeStore = defineStore('theme', {
       root.style.setProperty('--accent-dark', palette.dark)
       root.dataset.bg = this.theme === 'halloween' ? 'glow' : this.background
       root.dataset.theme = THEMES.some((item) => item.id === this.theme) ? this.theme : 'classic'
+      for (const icon of document.querySelectorAll('link[rel~="icon"]')) {
+        if (!icon.dataset.classicHref) icon.dataset.classicHref = icon.getAttribute('href') || '/favicon.ico'
+        icon.setAttribute('href', this.theme === 'halloween' ? halloweenLogo : icon.dataset.classicHref)
+      }
       if (window.electronAPI?.setWindowTheme) {
         void window.electronAPI.setWindowTheme(root.dataset.theme).catch((error) => {
           console.error('[theme] не удалось обновить системную панель:', error)
