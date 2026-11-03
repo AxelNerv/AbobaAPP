@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiSearch } from './movies.wikidata'
+import { apiSearch, getKpIDfromIMDB } from './movies.wikidata'
 
 const httpGet = vi.hoisted(() => vi.fn())
 vi.mock('axios', () => ({ default: { get: httpGet } }))
@@ -22,5 +22,23 @@ describe('ответ независимого поиска', () => {
       .mockResolvedValueOnce({ data: { data: [{ title: 'Кухня' }] } })
     await expect(apiSearch('Кухня')).rejects.toThrow('Некорректный ответ')
     await expect(apiSearch('Кухня')).rejects.toThrow('Некорректные данные')
+  })
+})
+
+describe('IMDB-номер → ID Кинопоиска', () => {
+  beforeEach(() => httpGet.mockReset())
+
+  it('принимает и tt-номер, и голые цифры без ведущих нулей', async () => {
+    httpGet.mockResolvedValue({ data: { data: { kp_id: '258687', title: 'Интерстеллар' } } })
+    expect(await getKpIDfromIMDB('tt0816692')).toMatchObject({ id_kp: '258687' })
+    expect(await getKpIDfromIMDB('816692')).toMatchObject({ id_kp: '258687' })
+    expect(httpGet.mock.calls.map(([url]) => url)).toEqual(['/api-backend/movies/imdb/tt0816692', '/api-backend/movies/imdb/tt0816692'])
+  })
+
+  it('не найдено — пустой ответ, без запроса для пустого ввода', async () => {
+    httpGet.mockResolvedValue({ data: { data: null } })
+    expect(await getKpIDfromIMDB('tt0000001')).toEqual({ id_kp: null, film: null })
+    expect(await getKpIDfromIMDB('abc')).toEqual({ id_kp: null, film: null })
+    expect(httpGet).toHaveBeenCalledTimes(1)
   })
 })

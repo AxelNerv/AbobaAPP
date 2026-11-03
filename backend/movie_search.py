@@ -76,6 +76,44 @@ class MovieSearch:
             self.cache.popitem(last=False)
         return result
 
+    async def by_imdb(self, imdb_id, session):
+        """IMDB ID -> Kinopoisk ID through Wikidata (P345 -> P2603).
+
+        Replaces the KinoBD lookup: KinoBD has answered 523 since autumn,
+        so ID search by IMDB number stopped working altogether.
+        """
+        imdb_id = str(imdb_id).strip().lower()
+        if not re.fullmatch(r"tt\d{5,10}", imdb_id):
+            raise ValueError("invalid IMDB ID")
+        key = ("imdb", imdb_id)
+        cached = self.cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        try:
+            async with self.slots:
+                data = await asyncio.wait_for(self._json(session, {
+                    "action": "query", "list": "search", "srlimit": 5,
+                    "srsearch": f"haswbstatement:P345={imdb_id}"}), timeout=10)
+                hits = [hit.get("title") for hit in data.get("query", {}).get("search", [])
+                        if isinstance(hit, dict) and re.fullmatch(r"Q[1-9]\d{0,15}", str(hit.get("title", "")))]
+                movie = None
+                if hits:
+                    data = await asyncio.wait_for(self._json(session, {
+                        "action": "wbgetentities", "ids": "|".join(hits),
+                        "props": "labels|descriptions|claims", "languages": "ru|en"}), timeout=10)
+                    for entity_id in hits:
+                        entity = data.get("entities", {}).get(entity_id)
+                        if isinstance(entity, dict) and isinstance(entity.get("claims"), dict):
+                            movie = entity_movie(entity)
+                            if movie:
+                                break
+        except (aiohttp.ClientError, asyncio.TimeoutError, TypeError, AttributeError) as error:
+            raise SourceUnavailable(f"Wikidata IMDB lookup: {type(error).__name__}") from error
+        self.cache[key] = (time.monotonic() + 3600, movie)
+        while len(self.cache) > 64:
+            self.cache.popitem(last=False)
+        return movie
+
     async def _json(self, session, params):
         async with session.get(API_URL, params={"format": "json", "maxlag": 5, **params},
                                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},

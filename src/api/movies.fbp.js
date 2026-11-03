@@ -34,14 +34,18 @@ const getSources = (kpId) => {
 
 export const getPlayers = async (kpId, options = {}) => {
   if (options.signal?.aborted) throw options.signal.reason
-  const { providers, type } = await waitForSharedRequest(getSources(kpId), options.signal)
-  // The new Veoveo relay passed playback and seeking on three dramas. It has
-  // not been verified for films, so those retain the existing reserve only.
-  const playable = providers.filter((provider) => {
-    if (!/^(turbo|collaps|veoveo)$/i.test(String(provider.type))) return false
-    const host = (() => { try { return new URL(provider.iframeUrl).hostname } catch { return '' } })()
-    return host !== 'player.shortener2.link' || type === 'TV_SERIES'
-  })
+  const { providers } = await waitForSharedRequest(getSources(kpId), options.signal)
+  // Veoveo через player.shortener2.link раньше пускали только для сериалов:
+  // проверен был лишь на дорамах. 03.11 живой прогон в Electron (видео играет
+  // с кадрами, перемотка на 65 с) прошёл и на фильмах, сериале и аниме —
+  // 7 из 7 тайтлов со ссылкой. Ограничение по типу снято.
+  //
+  // Alloha был выключен по проверке 01.11 «видео не декодируется». Причина
+  // была в самом тесте: он жал кнопки других плееров, а у Alloha свой плеер
+  // allplay, и без нажатия его «Воспроизвести» поток не начинает грузиться.
+  // С нажатием 03.11: 6 из 6 (фильмы, сериал, аниме, дорамы) — играет
+  // и перематывается. Единственный источник с 2160p/1440p в меню качества.
+  const playable = providers.filter((provider) => /^(turbo|alloha|collaps|veoveo)$/i.test(String(provider.type)))
   // Foreign-language translations do not replace the Russian player selection.
   const russian = playable.map((provider) => ({
     ...provider,
@@ -54,7 +58,7 @@ export const getPlayers = async (kpId, options = {}) => {
     if (String(player.provider).toLowerCase() !== 'veoveo') continue
     const host = new URL(player.iframe).hostname
     player.providerVariant = host.split('.').slice(-2).join('.')
-    player.variantLabel = host === 'player.shortener2.link' ? 'Резерв для сериалов и дорам' : 'Дополнительный резерв'
+    player.variantLabel = host === 'player.shortener2.link' ? 'Основной резерв' : 'Дополнительный резерв'
   }
   return players
 }

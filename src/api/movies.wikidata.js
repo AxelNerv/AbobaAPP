@@ -2,6 +2,19 @@ import axios from 'axios'
 import { getBackendUrl } from '@/api/backendUrl'
 import { resolvePosterSetByMovie } from '@/utils/mediaUtils'
 
+// IMDB-номер → ID Кинопоиска через Wikidata. Раньше этим занимался kinobd,
+// а он с осени отвечает 523 — поиск по IMDB не работал вовсе.
+// Принимаем и «tt0816692», и голые цифры (поиск передаёт номер без «tt»).
+export const getKpIDfromIMDB = async (imdbId, { signal } = {}) => {
+  const digits = String(imdbId || '').replace(/\D/g, '')
+  if (!digits) return { id_kp: null, film: null }
+  const id = `tt${digits.padStart(7, '0')}`
+  const { data } = await axios.get(`${getBackendUrl()}/movies/imdb/${id}`, { timeout: 15000, signal })
+  const movie = data?.data
+  if (!movie || !/^[1-9]\d{0,11}$/.test(String(movie.kp_id || ''))) return { id_kp: null, film: null }
+  return { id_kp: String(movie.kp_id), film: movie }
+}
+
 export const apiSearch = async (query, page = 1, { signal } = {}) => {
   const { data } = await axios.get(`${getBackendUrl()}/movies/search`, {
     params: { q: query, page }, timeout: 11000, signal

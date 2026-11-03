@@ -14,11 +14,13 @@ MAX_BODY = 512 * 1024
 CACHE_TTL = 120
 CACHE_SIZE = 128
 # Fixed destinations: the upstream response must not turn this into an open proxy.
-PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws", "kurolesya.link", "shortener2.link")
-SOURCE_URLS = {"fbp": API_BASE, "reyhoho": "https://api.reyhoho.fun"}
-# The reserve needs its lookup (up to 6 s) plus an embed probe (up to 4 s).
+PLAYER_HOSTS = ("stravers.live", "gorodyshka.link", "obrut.show", "nextembed.ws", "shortener2.link")
+# reyhoho (and its kurolesya.link Veoveo) removed 03.11: the API answers 504 from
+# Cloudflare, and the pool waited for it on every lookup — up to 10.5 s per film.
+SOURCE_URLS = {"fbp": API_BASE}
+# A source needs its lookup (up to 6 s) plus an embed probe (up to 4 s).
 # A 4 s outer deadline discarded healthy first visits before they completed.
-RESERVE_TIMEOUT = 10.5
+SOURCE_TIMEOUT = 10.5
 
 
 def allowed_embed(url):
@@ -119,16 +121,10 @@ class MovieSources:
             providers = data["data"]
             if any(not isinstance(p, dict) for p in providers) or len(providers) > 20:
                 raise SourceUnavailable("invalid provider list")
-            if self.source == "reyhoho":
-                # Only this new provider passed real film playback and seeking.
-                # The relay's Turbo, VideoSeed and Alloha did not pass.
-                providers = [p for p in providers if str(p.get("type", "")).lower() == "veoveo"]
-            else:
-                # This relay now plays the tested dramas, including seeking.
-                # Keep its exact verified host; older Veoveo endpoints remain
-                # excluded and the independent reserve is preserved separately.
-                providers = [p for p in providers if str(p.get("type", "")).lower() != "veoveo"
-                             or urlparse(str(p.get("iframeUrl", ""))).hostname == "player.shortener2.link"]
+            # This relay plays films, series, anime and dramas, including seeking.
+            # Keep its exact verified host; older Veoveo endpoints stay excluded.
+            providers = [p for p in providers if str(p.get("type", "")).lower() != "veoveo"
+                         or urlparse(str(p.get("iframeUrl", ""))).hostname == "player.shortener2.link"]
             results = await asyncio.gather(*(self._probe(p, session, headers) for p in providers))
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
             raise SourceUnavailable(type(error).__name__) from error
@@ -204,10 +200,13 @@ class MovieSources:
 
 
 class PlayerSourcePool:
-    """Fetch the fast sources together; an optional reserve cannot hide FBP."""
-    def __init__(self):
-        self.primary = MovieSources()
-        self.reserve = MovieSources("reyhoho")
+    """Ask every player API together; one dead API cannot hide the others.
+
+    Each source has its own deadline. New independent aggregators are added
+    to the list; the first one that answers names the result.
+    """
+    def __init__(self, sources=None):
+        self.sources = sources if sources is not None else [(MovieSources(), SOURCE_TIMEOUT)]
 
     async def get(self, kp_id, session, headers):
         if not re.fullmatch(r"[1-9]\d{0,11}", str(kp_id)):
@@ -220,7 +219,7 @@ class PlayerSourcePool:
                 print(f"[sources] {source.source}: {type(error).__name__}: {error}")
                 return error
 
-        results = await asyncio.gather(attempt(self.primary, 10.5), attempt(self.reserve, RESERVE_TIMEOUT))
+        results = await asyncio.gather(*(attempt(source, timeout) for source, timeout in self.sources))
         available = [result for result in results if isinstance(result, dict)]
         if not available:
             raise SourceUnavailable("all fast player APIs unavailable")

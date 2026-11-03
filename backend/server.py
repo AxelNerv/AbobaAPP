@@ -479,6 +479,18 @@ async def catalog_movie(kp_id: str):
     return await _catalog_response(_movie_catalog.details(kp_id, await _get_http_session()))
 
 
+@app.get("/movies/imdb/{imdb_id}")
+async def movie_by_imdb(imdb_id: str):
+    """Local desktop route: IMDB number -> Kinopoisk ID through Wikidata."""
+    try:
+        return {"data": await _movie_search.by_imdb(imdb_id, await _get_http_session())}
+    except ValueError:
+        raise HTTPException(400, "Invalid IMDB ID")
+    except SourceUnavailable as error:
+        print(f"[search] {error}")
+        raise HTTPException(502, f"IMDB lookup unavailable: {error}")
+
+
 @app.get("/movies/search")
 async def movie_search(q: str, page: int = 1):
     """Runs locally in the desktop backend; no VPS or API key is required."""

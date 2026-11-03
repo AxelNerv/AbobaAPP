@@ -302,7 +302,6 @@ const isMobile = computed(() => mainStore.isMobile)
 // «Открыто в приложении» — для кнопки «Открыть в приложении»,
 // которой внутри самого приложения быть не должно.
 const isDesktopApp = typeof window !== 'undefined' && !!window.electronAPI
-const isKinoBdProvider = computed(() => mainStore.contentApiProvider === 'kinobd')
 
 const activeTooltip = ref(null)
 const tooltipHovered = ref(false)
@@ -390,7 +389,9 @@ const BLOCKED_PLAYERS = ['FLIXCDN']
 
 // Приоритет плееров: чем раньше в списке — тем выше (и тем вероятнее станет дефолтным).
 // Turbo — самый стабильный/быстрый, поэтому он первый для обычного кино.
-const PLAYER_PRIORITY = ['TURBO', 'COLLAPS', 'VEOVEO', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
+// Alloha вторым: Turbo сам стартует быстрее, а Alloha даёт до 2160p и по
+// качеству выше Collaps (тот ~486p).
+const PLAYER_PRIORITY = ['TURBO', 'ALLOHA', 'COLLAPS', 'VEOVEO', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
 
 const playerPriorityIndex = (player) => {
   const list = PLAYER_PRIORITY
@@ -554,11 +555,7 @@ const fetchPlayers = async (append = false) => {
     errorCode.value = null
 
     // Each source has its own deadline; a global timer must not cut off backups.
-    const savedInid = playerStore.kinobdSourceByKpId?.[String(props.kpId)] || null
     const players = await getPlayers(props.kpId, {
-      mode: 'kp_id',
-      usePlayerData: true,
-      forceInid: isKinoBdProvider.value ? savedInid : null,
       excludeSources: [...failedPlayerSources],
       signal: request.signal
     })

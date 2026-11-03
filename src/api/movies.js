@@ -1,127 +1,30 @@
-import { useMainStore } from '@/store/main'
-import * as kinobd from '@/api/movies.kinobd'
-import * as kinobox from '@/api/movies.kinobox'
 import * as fbp from '@/api/movies.fbp'
 import * as wikidata from '@/api/movies.wikidata'
 import * as catalog from '@/api/movies.catalog'
+import { getRandomMovie } from '@/api/randomMovie'
 import { normalizeMovieListResponse } from '@/api/movieSeoNormalizer'
 import { runSourceChain } from '@/api/sourceChain'
 
-// Keep old sources: every new request tries them again after the earlier ones fail.
-// New independent adapters are added here; mirrors of the same API are not sources.
+// KinoBD (523 с осени) и Kinobox (вместо ответа перенаправляет на гигабайтный
+// файл) убраны из всех цепочек 03.11: живыми их проверки не проходят, а каждый
+// заход в мёртвый источник при сбое FBP добавлял секунды ожидания.
+// Новые независимые адаптеры добавляются сюда; зеркала того же API — не источники.
 const MOVIE_SOURCES = [
   { id: 'fbp', name: 'FBP', timeoutMs: 11000,
     players: (id, options) => fbp.getPlayers(id, options),
-    info: (id, options) => fbp.getKpInfo(id, options) },
-  { id: 'kinobd', name: 'KinoBD', timeoutMs: 10000,
-    players: (id, options) => kinobd.getPlayers(id, options),
-    info: (id, options) => kinobd.getKpInfo(id, options) },
-  { id: 'kinobox', name: 'Kinobox', timeoutMs: 8000,
-    players: (id, options) => kinobox.getPlayers(id, options) }
+    info: (id, options) => fbp.getKpInfo(id, options) }
 ]
-
-const CONTENT_PROVIDERS = {
-  KINOBD: 'kinobd',
-  KINOBOX: 'kinobox'
-}
-
-const KINOBD_SUPPORTED_METHODS = new Set([
-  'apiSearch',
-  'getKpInfo',
-  'getPlayers',
-  'getMovies',
-  'getKpIDfromIMDB',
-  'getRandomMovie'
-])
-const KINOBOX_SUPPORTED_METHODS = new Set(['getPlayers'])
-
-const getCurrentProvider = () => {
-  try {
-    const mainStore = useMainStore()
-    return mainStore.contentApiProvider || CONTENT_PROVIDERS.KINOBOX
-  } catch {
-    return CONTENT_PROVIDERS.KINOBOX
-  }
-}
-
-const searchKinoBDPlayerCandidates = async (...args) => kinobd.searchPlayerCandidates(...args)
-const getKinoBDPlayerDataByInid = async (...args) => kinobd.getPlayerDataByInid(...args)
-
-const callWithProvider = async (methodName, ...args) => {
-  const provider = getCurrentProvider()
-
-  if (provider === CONTENT_PROVIDERS.KINOBOX && KINOBOX_SUPPORTED_METHODS.has(methodName)) {
-    try {
-      return await kinobox[methodName](...args)
-    } catch (error) {
-      console.warn(`[movies] ${methodName} failed on Kinobox, fallback to KinoBD`, error)
-    }
-  }
-
-  if (KINOBD_SUPPORTED_METHODS.has(methodName)) {
-    return await tryInOrder(
-      methodName,
-      [{ name: 'kinobd', run: () => kinobd[methodName](...args) }],
-      (r) => r !== undefined && r !== null
-    )
-  }
-
-  throw new Error(`Unsupported movie API method: ${methodName}`)
-}
 
 const apiSearch = async (term, page = 1, { signal } = {}) => {
   const query = String(term || '').trim()
   if (query.length < 2) return []
   const data = await runSourceChain([
     { name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.apiSearch(query, page, { signal }) },
-    { name: 'Wikidata', timeoutMs: 12000, run: signal => wikidata.apiSearch(query, page, { signal }) },
-    { name: 'KinoBD', timeoutMs: 8000, run: signal => kinobd.apiSearch(query, page, { signal }) }
+    { name: 'Wikidata', timeoutMs: 12000, run: signal => wikidata.apiSearch(query, page, { signal }) }
   ], { label: 'apiSearch', isUsable: rows => Array.isArray(rows) && rows.length > 0,
     isEmpty: rows => Array.isArray(rows) && rows.length === 0, emptyResult: [], signal })
   return await normalizeMovieListResponse(data)
 }
-/**
- * Пробует источники по порядку и возвращает первый годный ответ.
- *
- * Зачем: раньше каждый метод сам городил try/catch с rhserv первым, и на
- * каждой загрузке страницы в консоль сыпалась ошибка 403 — rhserv давно
- * забанен, но его продолжали спрашивать первым. Переключение на живой
- * источник — это не сбой, поэтому шумим только когда не ответил НИКТО.
- *
- * @param {string} label   — имя метода для сообщений
- * @param {Array}  sources — [{ name, run }] в порядке предпочтения
- * @param {Function} isGood — проверка, что ответ пригоден
- */
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-const tryInOrder = async (label, sources, isGood, { retries = 1, retryDelay = 700 } = {}) => {
-  const problems = []
-
-  // Проходим по источникам, и если не ответил никто — пробуем ещё раз.
-  // Сбои чаще всего разовые: сеть моргнула, источник задумался. Без
-  // повтора страница фильма показывала ошибку, хотя плееры уже грузились
-  // с того же источника, и помогала только перезагрузка вручную.
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    if (attempt > 0) await wait(retryDelay)
-
-    for (const { name, run } of sources) {
-      try {
-        const result = await run()
-        if (isGood(result)) return result
-        problems.push(`${name}: пусто`)
-      } catch (error) {
-        problems.push(`${name}: ${error?.message || 'ошибка'}`)
-      }
-    }
-  }
-
-  const err = new Error(`${label}: ни один источник не ответил`)
-  err.allSourcesDown = true
-  err.details = problems
-  console.error(`[movies] ${label} — все источники недоступны:`, problems.join('; '))
-  throw err
-}
-
 const hasRows = (rows) => Array.isArray(rows) && rows.length > 0
 
 const getKpInfo = async (kpId, _token, { signal } = {}) => {
@@ -139,7 +42,6 @@ const getKpInfo = async (kpId, _token, { signal } = {}) => {
   // Optional external metadata is loaded in the background by the movie page.
   return data
 }
-// Independent source first: a KinoBD outage must not delay a working player.
 const hasPlayers = (result) =>
   result && typeof result === 'object' && !Array.isArray(result) &&
   Object.values(result).some(player => typeof player?.iframe === 'string' && /^https?:\/\//.test(player.iframe))
@@ -163,8 +65,7 @@ const getMovies = async (...args) => {
   let rows
   try {
     rows = await runSourceChain([
-      { name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.getMovies({ ...args[0], signal }) },
-      { name: 'KinoBD', timeoutMs: 8000, run: () => kinobd.getMovies(...args) }
+      { name: 'Кинопоиск', timeoutMs: 12000, run: signal => catalog.getMovies({ ...args[0], signal }) }
     ], { label: 'getMovies', isUsable: hasRows, isEmpty: rows => Array.isArray(rows) && !rows.length,
       emptyResult: [], signal: args[0]?.signal })
     // С фильтром пустой список — честный ответ, а не авария: подменять его нельзя.
@@ -187,12 +88,9 @@ const getMovies = async (...args) => {
 const getMoviesPaginated = async ({ page = 2, typeFilter = 'all' } = {}) => {
   return getMovies({ typeFilter, page, limit: 100 })
 }
-const getKpIDfromIMDB = async (...args) => callWithProvider('getKpIDfromIMDB', ...args)
-const getRandomMovie = async (...args) => callWithProvider('getRandomMovie', ...args)
+const getKpIDfromIMDB = async (...args) => wikidata.getKpIDfromIMDB(...args)
 
 export {
-  searchKinoBDPlayerCandidates,
-  getKinoBDPlayerDataByInid,
   apiSearch,
   getKpInfo,
   getPlayers,
@@ -200,13 +98,4 @@ export {
   getMoviesPaginated,
   getKpIDfromIMDB,
   getRandomMovie
-}
-
-export const toggleErrorSimulation = (enabled) => {
-  if (typeof kinobd.toggleErrorSimulation === 'function') {
-    kinobd.toggleErrorSimulation(enabled)
-  }
-  if (typeof kinobox.toggleErrorSimulation === 'function') {
-    kinobox.toggleErrorSimulation(enabled)
-  }
 }

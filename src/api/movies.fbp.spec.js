@@ -44,15 +44,27 @@ describe('общая загрузка информации и плееров', (
     expect(result.map((p) => p.translate)).toEqual(['Collaps', 'Дублированный'])
   })
 
+  // Здесь раньше стоял Alloha. 03.11 выяснилось, что «не воспроизводящий»
+  // был ошибкой теста воспроизведения, и Alloha включён. Смысл проверки
+  // прежний — непроверенный плеер в выдачу не пролезает; теперь это VideoSeed.
   it('не предлагает открывающийся, но не воспроизводящий видео плеер', async () => {
     const { getPlayers } = await import('@/api/movies.fbp')
     httpGet.mockResolvedValue({ data: { kp_id: '258687', providers: [
-      { type: 'Alloha', iframeUrl: 'https://example.org/stalled' },
+      { type: 'VideoSeed', iframeUrl: 'https://example.org/stalled' },
       { type: 'Collaps', iframeUrl: 'https://api.nextembed.ws/embed/movie/180' }
     ] } })
     const result = Object.values(await getPlayers('258687'))
     expect(result).toHaveLength(1)
     expect(result[0].provider).toBe('Collaps')
+  })
+
+  it('выдаёт Alloha — единственный источник с 4K', async () => {
+    const { getPlayers } = await import('@/api/movies.fbp')
+    httpGet.mockResolvedValue({ data: { kp_id: '258687', providers: [
+      { type: 'Alloha', iframeUrl: 'https://theatre.stravers.live/?token_movie=x' },
+      { type: 'Collaps', iframeUrl: 'https://api.nextembed.ws/embed/movie/180' }
+    ] } })
+    expect(Object.values(await getPlayers('258687')).map(p => p.provider)).toEqual(['Alloha', 'Collaps'])
   })
 
   it('сохраняет Turbo, даже если серверная проверка требует браузер', async () => {
@@ -73,16 +85,19 @@ describe('общая загрузка информации и плееров', (
     const players = Object.values(await getPlayers('1398965'))
     expect(players).toHaveLength(2)
     expect(players.map(p => p.providerVariant)).toEqual(['shortener2.link', 'kurolesya.link'])
-    expect(players[0].variantLabel).toContain('дорам')
+    expect(players[0].variantLabel).toBe('Основной резерв')
   })
 
-  it('не выдаёт непроверенный для фильмов маршрут Veoveo вместо прежнего резерва', async () => {
+  // Раньше здесь проверялось обратное — что фильмам этот маршрут не выдаётся.
+  // Ограничение снято осознанно: 03.11 маршрут прошёл живое воспроизведение
+  // и перемотку на фильмах, сериале и аниме.
+  it('выдаёт маршрут Veoveo и для фильмов, сохраняя второй резерв', async () => {
     const { getPlayers } = await import('@/api/movies.fbp')
     httpGet.mockResolvedValue({ data: { kp_id: '258687', type: 'FILM', providers: [
       { type: 'Veoveo', iframeUrl: 'https://player.shortener2.link/film' },
       { type: 'Veoveo', iframeUrl: 'https://kurolesya.link/film' }
     ] } })
-    expect(Object.values(await getPlayers('258687')).map(p => p.providerVariant)).toEqual(['kurolesya.link'])
+    expect(Object.values(await getPlayers('258687')).map(p => p.providerVariant)).toEqual(['shortener2.link', 'kurolesya.link'])
   })
 
   it('добавляет независимый Veoveo и сохраняет только русские переводы', async () => {

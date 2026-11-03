@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiSearch } from './movies'
 import * as wikidata from './movies.wikidata'
-import * as kinobd from './movies.kinobd'
 import * as catalog from './movies.catalog'
 
 vi.mock('./movies.wikidata', () => ({ apiSearch: vi.fn() }))
-vi.mock('./movies.kinobd', () => ({ apiSearch: vi.fn() }))
 vi.mock('./movies.catalog', () => ({ apiSearch: vi.fn() }))
 vi.mock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async rows => rows }))
 
@@ -21,42 +19,32 @@ describe('независимая цепочка поиска', () => {
     catalog.apiSearch.mockResolvedValue([row])
     expect(await apiSearch('Кухня')).toEqual([row])
     expect(wikidata.apiSearch).not.toHaveBeenCalled()
-    expect(kinobd.apiSearch).not.toHaveBeenCalled()
   })
 
-  it('ищет без обращения к недоступному KinoBD', async () => {
+  it('при сбое каталога ищет через Wikidata', async () => {
     wikidata.apiSearch.mockResolvedValue([row])
     expect(await apiSearch(' Кухня ')).toEqual([row])
-    expect(kinobd.apiSearch).not.toHaveBeenCalled()
     expect(wikidata.apiSearch.mock.calls[0][0]).toBe('Кухня')
-  })
-
-  it('сохраняет старый источник при сбое нового', async () => {
-    wikidata.apiSearch.mockRejectedValue(new Error('HTTP 502'))
-    kinobd.apiSearch.mockResolvedValue([row])
-    expect(await apiSearch('Кухня')).toEqual([row])
   })
 
   it('источники упали — ошибка, а не ничего не найдено', async () => {
     wikidata.apiSearch.mockRejectedValue(new Error('HTTP 502'))
-    kinobd.apiSearch.mockRejectedValue(new Error('timeout'))
     await expect(apiSearch('Кухня')).rejects.toMatchObject({ allSourcesDown: true })
   })
 
   it('пустой результат отличается от падения источников', async () => {
     wikidata.apiSearch.mockResolvedValue([])
-    kinobd.apiSearch.mockRejectedValue(new Error('timeout'))
     expect(await apiSearch('missing')).toEqual([])
   })
 
   it('таймаут первого источника отменяет запрос и включает резерв', async () => {
     vi.useFakeTimers()
-    wikidata.apiSearch.mockImplementation(() => new Promise(() => {}))
-    kinobd.apiSearch.mockResolvedValue([row])
+    catalog.apiSearch.mockImplementation(() => new Promise(() => {}))
+    wikidata.apiSearch.mockResolvedValue([row])
     const result = apiSearch('Кухня')
     await vi.advanceTimersByTimeAsync(12001)
     expect(await result).toEqual([row])
-    expect(wikidata.apiSearch.mock.calls[0][2].signal.aborted).toBe(true)
+    expect(catalog.apiSearch.mock.calls[0][2].signal.aborted).toBe(true)
   })
 
   it('не отправляет односимвольные запросы', async () => {

@@ -45,35 +45,34 @@ describe('фильтр типов kinobd', () => {
 })
 
 describe('подмена заготовленным каталогом', () => {
-  const kinobdGetMovies = vi.fn()
+  // Каталог Кинопоиска — теперь единственный источник топа (kinobd убран 03.11).
+  const catalogGetMovies = vi.fn()
 
   beforeEach(() => {
     vi.resetModules()
-    kinobdGetMovies.mockReset()
+    catalogGetMovies.mockReset()
     vi.doMock('@/store/main', () => ({ useMainStore: () => { throw new Error('no pinia') } }))
     vi.doMock('@/api/movieSeoNormalizer', () => ({ normalizeMovieListResponse: async (rows) => rows }))
-    vi.doMock('@/api/movies.kinobox', () => ({}))
-    vi.doMock('@/api/movies.catalog', () => ({ getMovies: vi.fn().mockRejectedValue(new Error('catalogue unavailable')) }))
-    vi.doMock('@/api/movies.kinobd', () => ({ getMovies: (...a) => kinobdGetMovies(...a) }))
+    vi.doMock('@/api/movies.catalog', () => ({ getMovies: (...a) => catalogGetMovies(...a) }))
     vi.doMock('@/data/movies.json', () => ({ default: [{ kp_id: 'заготовка' }] }))
   })
 
   it('с фильтром пустой ответ остаётся пустым, а не чужим списком', async () => {
-    kinobdGetMovies.mockResolvedValue([])
+    catalogGetMovies.mockResolvedValue([])
     const { getMovies } = await import('@/api/movies')
     expect(await getMovies({ typeFilter: 'series', limit: 10 })).toEqual([])
   })
 
   it('с фильтром сбой источника — ошибка, а не подмена', async () => {
-    kinobdGetMovies.mockRejectedValue(new Error('kinobd упал'))
+    catalogGetMovies.mockRejectedValue(new Error('каталог упал'))
     const { getMovies } = await import('@/api/movies')
     await expect(getMovies({ typeFilter: 'movie', limit: 10 })).rejects.toMatchObject({
-      allSourcesDown: true, details: expect.arrayContaining([expect.stringContaining('kinobd упал')])
+      allSourcesDown: true, details: expect.arrayContaining([expect.stringContaining('каталог упал')])
     })
   })
 
   it('без фильтра при сбое главная всё равно открывается с заготовкой', async () => {
-    kinobdGetMovies.mockRejectedValue(new Error('kinobd упал'))
+    catalogGetMovies.mockRejectedValue(new Error('каталог упал'))
     const { getMovies } = await import('@/api/movies')
     expect(await getMovies({ typeFilter: 'all', limit: 10 })).toEqual([{ kp_id: 'заготовка' }])
   })

@@ -41,6 +41,10 @@ defineProps({ preview: Boolean })
   position: absolute; top: 0; right: 0;
   width: min(28%, 52px); aspect-ratio: 80 / 70;
   background: url('@/assets/halloween-card-web.svg') top right / contain no-repeat;
+  /* Нити светлые (#dfcdd6) и на светлых постерах пропадали. Тёмный ореол
+     идёт вдоль самих линий (drop-shadow берёт форму из прозрачности SVG),
+     поэтому паутина читается на любом фоне, не превращаясь в пятно. */
+  filter: drop-shadow(0 0 .6px rgb(12 6 10 / .95)) drop-shadow(0 0 1.6px rgb(12 6 10 / .6));
   opacity: 0;
   transform-origin: top center;
   transform: scaleX(var(--web-mirror, 1)) scale(.4);
