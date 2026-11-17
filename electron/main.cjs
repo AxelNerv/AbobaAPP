@@ -389,9 +389,48 @@ handle('share:open-firewall', async () => {
 })
 
 handle('app:version', () => app.getVersion())
-handle('app:window-theme', (theme) => require('./windowTheme.cjs').setWindowTheme(mainWindow, theme, process.platform, {
-  icons: { classic: path.join(APP_ROOT, 'build', 'icon.ico'), halloween: path.join(APP_ROOT, 'build', 'icon-halloween.png') }, tray
-}))
+// Ярлыки трогает только основная установка: копия с instance.json живёт
+// рядом и может стоять в другой теме. В упакованном приложении .ico лежит
+// вне asar (extraResources) — оболочка Windows внутрь архива не заглядывает.
+let shortcutIcons = null
+const updateShortcutIcons = (theme) => {
+  if (process.platform !== 'win32' || instance.file) return
+  if (!shortcutIcons) {
+    const { createShortcutIcons, shortcutPaths, samePath } = require('./shortcutIcons.cjs')
+    shortcutIcons = createShortcutIcons({
+      shell,
+      paths: shortcutPaths({
+        appData: app.getPath('appData'),
+        desktop: app.getPath('desktop'),
+        publicDesktop: process.env.PUBLIC && path.join(process.env.PUBLIC, 'Desktop'),
+        programData: process.env.ProgramData
+      }),
+      halloweenIcon: app.isPackaged
+        ? path.join(process.resourcesPath, 'icons', 'icon-halloween.ico')
+        : path.join(APP_ROOT, 'build', 'icon-halloween.ico'),
+      // Из исходников запущен electron.exe, поэтому установку узнаём по имени.
+      ownsTarget: app.isPackaged
+        ? (target) => samePath(target, process.execPath)
+        : (target) => path.win32.basename(target).toLowerCase() === 'abobatv.exe'
+    })
+  }
+  const { updated, failed } = shortcutIcons(theme)
+  if (updated.length || failed.length) {
+    console.log(`[theme] значок ярлыков «${theme}»: обновлено ${updated.length}, нет прав ${failed.length}`)
+  }
+}
+
+handle('app:window-theme', (theme) => {
+  const result = require('./windowTheme.cjs').setWindowTheme(mainWindow, theme, process.platform, {
+    icons: { classic: path.join(APP_ROOT, 'build', 'icon.ico'), halloween: path.join(APP_ROOT, 'build', 'icon-halloween.png') }, tray
+  })
+  try {
+    updateShortcutIcons(theme)
+  } catch (error) {
+    console.warn('[theme] не удалось обновить значок ярлыков:', error?.message || error)
+  }
+  return result
+})
 handle('app:restart-theme', require('./themeRestart.cjs').createThemeRestart({
   app, isBusy: () => maintenance,
   beforeQuit: () => { quitting = true }

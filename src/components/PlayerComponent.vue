@@ -389,16 +389,33 @@ const BLOCKED_PLAYERS = ['FLIXCDN']
 
 // Приоритет плееров: чем раньше в списке — тем выше (и тем вероятнее станет дефолтным).
 // Turbo — самый стабильный/быстрый, поэтому он первый для обычного кино.
-// Alloha вторым: Turbo сам стартует быстрее, а Alloha даёт до 2160p и по
-// качеству выше Collaps (тот ~486p).
-const PLAYER_PRIORITY = ['TURBO', 'ALLOHA', 'COLLAPS', 'VEOVEO', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
+// По умолчанию — надёжность, а не пиковое качество. Veoveo вторым: в ноябре
+// он единственный стабильно играл, когда Turbo и Collaps умерли, а у Alloha
+// сломался CDN — страница открывается, но видео не стартует, и автопереход
+// этого не замечает. Alloha с его 2160p остаётся в выборе для ручного включения.
+const PLAYER_PRIORITY = ['TURBO', 'VEOVEO', 'ALLOHA', 'COLLAPS', 'KODIK', 'VIBIX', 'VIDEOSEED', 'СЫЕНДУК']
+
+// Бэкенд не достучался до плеера, но оставил его «проверить в браузере»:
+// так переживают разовые сбои сети. Когда же сервер плеера мёртв всерьёз
+// (Turbo в ноябре, пока провайдер резал его страницу), такой кандидат стоял
+// первым — каждый фильм начинался с 12 секунд ожидания, прежде чем включался
+// рабочий плеер. Теперь он остаётся для ручного выбора, а по умолчанию идут
+// проверенные. Ответ 4xx недоступностью не считается: сервер жив, просто не
+// пускает скрипт бэкенда — у Turbo это антибот, а в Electron он играет.
+const isUnverifiedPlayer = (player) => {
+  const { browserOnly, probeIssue } = player?.raw_data || {}
+  if (!browserOnly || !probeIssue) return false
+  const status = Number(/^probe HTTP (\d{3})$/.exec(String(probeIssue))?.[1])
+  return !(status >= 400 && status < 500)
+}
 
 const playerPriorityIndex = (player) => {
   const list = PLAYER_PRIORITY
   const name = normalizeKey(`${getProviderDisplayName(player)} ${player.key}`)
   const idx = list.findIndex((p) => name.includes(p))
   // Не найденные — в конец, но сохраняя исходный порядок
-  return idx === -1 ? list.length + 1 : idx
+  const base = idx === -1 ? list.length + 1 : idx
+  return isUnverifiedPlayer(player) ? base + list.length + 2 : base
 }
 
 // Метка «4K» в выборе плеера. Выбор по умолчанию не меняется — первым
@@ -480,7 +497,13 @@ const applyPlayersData = (players, append = false) => {
     console.warn('[player] не удалось прочитать выбранный плеер:', error?.message || error)
   }
 
-  if (restoredFromStorage) {
+  // Сохранённый или любимый плеер не включаем сами, если бэкенд до него
+  // не достучался, а проверенный есть: иначе сериал, который смотрели
+  // в Turbo, после его смерти каждый раз открывался бы с ожиданием.
+  const hasVerified = playersInternal.value.some((player) => !isUnverifiedPlayer(player))
+  const usable = (player) => player && (!hasVerified || !isUnverifiedPlayer(player))
+
+  if (usable(restoredFromStorage)) {
     selectedPlayerInternal.value = restoredFromStorage
   } else if (preferredPlayer.value) {
     const normalizedPreferred = normalizeKey(preferredPlayer.value)
@@ -489,7 +512,7 @@ const applyPlayersData = (players, append = false) => {
         normalizeKey(player.key) === normalizedPreferred ||
         normalizeKey(getProviderDisplayName(player)) === normalizedPreferred
     )
-    selectedPlayerInternal.value = preferred || playersInternal.value[0]
+    selectedPlayerInternal.value = usable(preferred) ? preferred : playersInternal.value[0]
   } else {
     selectedPlayerInternal.value = playersInternal.value[0]
   }

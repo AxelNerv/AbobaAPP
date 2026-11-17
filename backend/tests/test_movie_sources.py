@@ -151,6 +151,42 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
                       {**provider, "iframeUrl": "https://api.nextembed.ws/working"}):
             self.assertIsNone(await self.service._probe(other, TimedOutSession(), {}))
 
+    async def test_dropped_connection_gets_one_quick_retry(self):
+        # The router's anti-blocking path resets an occasional TLS handshake;
+        # the browser reconnects, so the probe must not mark Turbo down at once.
+        provider = {"type": "Turbo", "iframeUrl": "https://x.obrut.show/broken"}
+        attempts = []
+
+        class FlakySession:
+            def get(inner_self, url, **kwargs):
+                attempts.append(url)
+                if len(attempts) == 1:
+                    raise aiohttp.ClientConnectorError(SimpleNamespace(), ConnectionResetError())
+                return self.session.get(url, **kwargs)
+
+        result = await self.service._probe(provider, FlakySession(), {})
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(result[0]["probeIssue"], "probe HTTP 403")
+
+    async def test_repeated_reset_marks_turbo_and_timeout_is_not_retried(self):
+        provider = {"type": "Turbo", "iframeUrl": "https://x.obrut.show/working"}
+        calls = []
+
+        class FailingSession:
+            def __init__(inner_self, error):
+                inner_self.error = error
+
+            def get(inner_self, *args, **kwargs):
+                calls.append(type(inner_self.error).__name__)
+                raise inner_self.error
+
+        reset = aiohttp.ClientConnectorError(SimpleNamespace(), ConnectionResetError())
+        result = await self.service._probe(provider, FailingSession(reset), {})
+        self.assertEqual(result[0]["probeIssue"], "ClientConnectorError")
+        self.assertEqual(calls.count("ClientConnectorError"), 2)
+        await self.service._probe(provider, FailingSession(asyncio.TimeoutError()), {})
+        self.assertEqual(calls.count("TimeoutError"), 1)
+
     async def test_cancelling_one_consumer_does_not_cancel_other(self):
         one = asyncio.create_task(self.get())
         two = asyncio.create_task(self.get())

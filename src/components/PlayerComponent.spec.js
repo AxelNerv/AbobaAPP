@@ -185,6 +185,52 @@ describe('ожидание резервных источников в интер
     expect(modal.props('players').map(player => player.provider)).toEqual(['Turbo', 'Veoveo'])
   })
 
+  // Сервер Turbo не отвечает (как в ноябре, пока провайдер резал страницу):
+  // бэкенд пометил его «проверить в браузере». Он в списке, но не первый.
+  it('непроверенный бэкендом Turbo не открывается первым, но остаётся в выборе', async () => {
+    getPlayers.mockResolvedValue({
+      Turbo: { iframe: 'https://x.obrut.show/embed/film', provider: 'Turbo', source: 'fbp',
+        raw_data: { browserOnly: true, probeIssue: 'TimeoutError' } },
+      Veoveo: { iframe: 'https://player.shortener2.link/film', provider: 'Veoveo', source: 'fbp' }
+    })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('iframe').attributes('src')).toContain('shortener2.link')
+    await wrapper.find('.player-btn').trigger('click')
+    const modal = wrapper.findComponent({ name: 'PlayerModal' })
+    expect(modal.props('players').map(player => player.provider)).toEqual(['Veoveo', 'Turbo'])
+  })
+
+  it('не восстанавливает сохранённый мёртвый Turbo, если есть проверенный плеер', async () => {
+    localStorage.setItem('abobatv_selected_player_687595', 'TURBO')
+    getPlayers.mockResolvedValue({
+      Turbo: { iframe: 'https://x.obrut.show/embed/film', provider: 'Turbo', source: 'fbp',
+        raw_data: { browserOnly: true, probeIssue: 'TimeoutError' } },
+      Veoveo: { iframe: 'https://player.shortener2.link/film', provider: 'Veoveo', source: 'fbp' }
+    })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('iframe').attributes('src')).toContain('shortener2.link')
+  })
+
+  // 403 — обычный ответ антибота Turbo скрипту бэкенда; в Electron он играет.
+  it.each([
+    ['probe HTTP 403', 'obrut.show', ['Turbo', 'Veoveo']],
+    ['probe HTTP 502', 'shortener2.link', ['Veoveo', 'Turbo']]
+  ])('Turbo с «%s»: на 4xx сервер жив и остаётся первым, на 5xx уходит вниз', async (probeIssue, first, order) => {
+    getPlayers.mockResolvedValue({
+      Turbo: { iframe: 'https://x.obrut.show/embed/film', provider: 'Turbo', source: 'fbp',
+        raw_data: { browserOnly: true, probeIssue } },
+      Veoveo: { iframe: 'https://player.shortener2.link/film', provider: 'Veoveo', source: 'fbp' }
+    })
+    wrapper = createPlayer()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(wrapper.find('iframe').attributes('src')).toContain(first)
+    await wrapper.find('.player-btn').trigger('click')
+    const modal = wrapper.findComponent({ name: 'PlayerModal' })
+    expect(modal.props('players').map(player => player.provider)).toEqual(order)
+  })
+
   it('сохраняет оба разных маршрута Veoveo и переходит между ними при ошибке', async () => {
     getPlayers.mockResolvedValue({
       Turbo: { iframe: 'https://x.obrut.show/serial', provider: 'Turbo', source: 'fbp' },

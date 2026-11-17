@@ -166,37 +166,49 @@ class MovieSources:
             print(f"[sources] Turbo: {reason}; browser playback not verified")
             return {**cleaned, "browserOnly": True, "probeIssue": reason}, {}
 
-        try:
-            async with self.probe_slots:
-                for _ in range(3):
-                    async with session.get(url, headers=page_headers, allow_redirects=False,
-                                           timeout=aiohttp.ClientTimeout(total=4, connect=2)) as response:
-                        # Veoveo's first visit sets a cookie and redirects on the
-                        # same host. Validate every hop; never follow arbitrary URLs.
-                        if response.status in (301, 302, 303, 307, 308):
-                            location = response.headers.get("Location")
-                            target = urljoin(url, location) if location else ""
-                            if not allowed_embed(target) or urlparse(target).hostname.lower() != host:
-                                raise ValueError("untrusted embed redirect")
-                            url = target
-                            continue
-                        # Turbo's HTTP 403 probe can still play in Electron.
-                        if browser_turbo and (response.status in (403, 408, 429) or response.status >= 500):
-                            return unverified(f"probe HTTP {response.status}")
-                        if response.status != 200:
-                            print(f"[sources] {provider.get('type')}: embed HTTP {response.status}")
-                            return None
-                        if "text/html" not in response.headers.get("Content-Type", "").lower():
-                            print(f"[sources] {provider.get('type')}: embed is not HTML")
-                            return None
-                        page = (await read_limited(response)).decode("utf-8", "replace")
-                        return cleaned, page_metadata(page)
-                raise ValueError("too many embed redirects")
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
+        def failed(error):
             print(f"[sources] {provider.get('type')}: embed {type(error).__name__}")
             if browser_turbo and isinstance(error, (aiohttp.ClientError, asyncio.TimeoutError)):
                 return unverified(type(error).__name__)
             return None
+
+        # A path around network blocking resets an occasional TLS handshake,
+        # and the browser simply reconnects; so a dropped connection gets one
+        # quick retry. Timeouts are not retried: a dead server must not add
+        # seconds to every film.
+        for attempt in range(2):
+            try:
+                async with self.probe_slots:
+                    for _ in range(3):
+                        async with session.get(url, headers=page_headers, allow_redirects=False,
+                                               timeout=aiohttp.ClientTimeout(total=4, connect=2)) as response:
+                            # Veoveo's first visit sets a cookie and redirects on the
+                            # same host. Validate every hop; never follow arbitrary URLs.
+                            if response.status in (301, 302, 303, 307, 308):
+                                location = response.headers.get("Location")
+                                target = urljoin(url, location) if location else ""
+                                if not allowed_embed(target) or urlparse(target).hostname.lower() != host:
+                                    raise ValueError("untrusted embed redirect")
+                                url = target
+                                continue
+                            # Turbo's HTTP 403 probe can still play in Electron.
+                            if browser_turbo and (response.status in (403, 408, 429) or response.status >= 500):
+                                return unverified(f"probe HTTP {response.status}")
+                            if response.status != 200:
+                                print(f"[sources] {provider.get('type')}: embed HTTP {response.status}")
+                                return None
+                            if "text/html" not in response.headers.get("Content-Type", "").lower():
+                                print(f"[sources] {provider.get('type')}: embed is not HTML")
+                                return None
+                            page = (await read_limited(response)).decode("utf-8", "replace")
+                            return cleaned, page_metadata(page)
+                    raise ValueError("too many embed redirects")
+            except aiohttp.ClientConnectorError as error:
+                if attempt == 0 and not isinstance(error, aiohttp.ClientSSLError):
+                    continue
+                return failed(error)
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
+                return failed(error)
 
 
 class PlayerSourcePool:

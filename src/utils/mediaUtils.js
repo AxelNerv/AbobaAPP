@@ -1,5 +1,9 @@
-const KP_SMALL_POSTER_BASE = 'https://kinopoiskapiunofficial.tech/images/posters/kp_small'
-const KP_POSTER_BASE = 'https://kinopoiskapiunofficial.tech/images/posters/kp'
+// Постеры по ID Кинопоиска — с хоста Яндекса: он сразу перенаправляет на
+// avatars.mds.yandex.net и отвечает за доли секунды. Раньше первым шёл
+// kinopoiskapiunofficial.tech, а с ноября он не отвечает: каждый запрос
+// висел 12 секунд, и карточки стояли без постеров.
+const kpPreviewPoster = (kpId) => `https://st.kp.yandex.net/images/film_iphone/iphone360_${kpId}.jpg`
+const kpFullPoster = (kpId) => `https://st.kp.yandex.net/images/film_big/${kpId}.jpg`
 
 // Локальная заглушка (data URI 2:3 темно-серый прямоугольник с иконкой)
 const NO_POSTER_PLACEHOLDER =
@@ -31,10 +35,13 @@ const normalizeUrl = (value) => {
 // остаётся пустая рамка.
 // Сравнение было строгим (=== 'kbd.so') и не ловило поддомены, а картинки
 // лежат как раз на i.kbd.so — из-за этого история и избранное стояли пустыми.
+// kinopoiskapiunofficial.tech — сюда же: такие адреса могли сохраниться
+// в избранном и истории до ноября.
+const STALLING_POSTER_HOSTS = ['kbd.so', 'kinopoiskapiunofficial.tech']
 const isStallingPosterUrl = (value) => {
   try {
     const host = new URL(value).hostname
-    return host === 'kbd.so' || host.endsWith('.kbd.so')
+    return STALLING_POSTER_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`))
   } catch {
     return false
   }
@@ -74,12 +81,9 @@ export const resolvePosterByMovie = (movie = {}) => {
 
   if (direct) return direct
 
-  // Фолбек 1: kinopoiskapiunofficial.tech по kp_id
+  // Фолбек: постер Кинопоиска по kp_id
   const kpId = getKpIdFromMovie(movie)
-  if (kpId) return `${KP_SMALL_POSTER_BASE}/${kpId}.jpg`
-
-  // Фолбек 2: img.kinopoisk.ru (альтернативный хост)
-  if (kpId) return `https://st.kp.yandex.net/images/film_iphone/iphone360_${kpId}.jpg`
+  if (kpId) return kpPreviewPoster(kpId)
 
   // Последний фолбек — заглушка
   return NO_POSTER_PLACEHOLDER
@@ -103,10 +107,8 @@ export const resolvePosterChain = (movie = {}) => {
 
   const kpId = getKpIdFromMovie(movie)
   if (kpId) {
-    chain.push(`${KP_SMALL_POSTER_BASE}/${kpId}.jpg`)
-    chain.push(`${KP_POSTER_BASE}/${kpId}.jpg`)
-    chain.push(`https://st.kp.yandex.net/images/film_iphone/iphone360_${kpId}.jpg`)
-    chain.push(`https://st.kp.yandex.net/images/film_big/${kpId}.jpg`)
+    chain.push(kpPreviewPoster(kpId))
+    chain.push(kpFullPoster(kpId))
   }
 
   const imdbId = getImdbIdFromMovie(movie)
@@ -155,7 +157,7 @@ export const resolvePosterSetByMovie = (movie = {}) => {
       .find((url) => url && !isStallingPosterUrl(url)) ||
     (() => {
       const kpId = getKpIdFromMovie(movie)
-      return kpId ? `${KP_POSTER_BASE}/${kpId}.jpg` : ''
+      return kpId ? kpFullPoster(kpId) : ''
     })()
 
   return {

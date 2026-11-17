@@ -1,6 +1,6 @@
 {
   "name": "abobatv",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "private": true,
   "type": "module",
   "scripts": {
@@ -91,6 +91,10 @@
           "**/*",
           "!**/__pycache__/**"
         ]
+      },
+      {
+        "from": "build/icon-halloween.ico",
+        "to": "icons/icon-halloween.ico"
       }
     ],
     "win": {
